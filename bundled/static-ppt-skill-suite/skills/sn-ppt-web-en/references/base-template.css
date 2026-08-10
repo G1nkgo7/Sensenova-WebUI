@@ -42,27 +42,29 @@
      用主色/辅助色的深浅 + 同色系冷暖偏移派生;别用调色板外色相,别和默认 ECharts 调色板。 */
   --series-1: #c9a227;  /* TODO = 主色 */
   --series-2: #5a7ca0;  /* TODO = 辅助色 */
-  --series-3: #e0c463;  /* TODO 主色提亮 */
-  --series-4: #3f5d7a;  /* TODO 辅助色压暗 */
-  --series-5: #9a7d1f;  /* TODO 主色压暗 */
-  --series-6: #86a6c4;  /* TODO 辅助色提亮 */
+  --series-3: #e0c463;  /* TODO lighter primary */
+  --series-4: #3f5d7a;  /* TODO darker secondary */
+  --series-5: #9a7d1f;  /* TODO darker primary */
+  --series-6: #86a6c4;  /* TODO lighter secondary */
 
-  /* —— 字体 token —— */
+  /* —— Font tokens —— */
   --font-sans:  "Noto Sans SC", "IBM Plex Sans", system-ui, sans-serif;
   --font-serif: "Noto Serif SC", "Spectral", serif;
   --font-body:  var(--font-sans);
-  --font-title: var(--font-sans);   /* 标题:默认黑体;封面/hero 可换 serif/黑体/书法(见下) */
-  /* —— 展示 / 书法 / 手写体(封面·hero·金句·批注;仅使用已登记 OFL-1.1 字体)——
-     用法:封面/hero **常同屏多款各司其职**(书法主标题 + 超粗黑体大字 hero + 宋/楷小标签 + 手写批注);
-     正文/图表标注用 --font-sans；大 KPI/章节数字用 --font-number；技术编号才用 --font-mono。创作时使用本地栈；交付时 font_bundle.py 将实际角色映射为 Deck 自带 WOFF2。 */
-   --font-hei-heavy:     "Noto Sans SC", "Smiley Sans", sans-serif;      /* 默认 Noto 900；得意黑仅在明确选用且已装时使用，二者均 OFL */
-   --font-brush:         "Ma Shan Zheng", "Noto Serif SC", cursive;      /* 马善政毛笔:文旅/传统/人文 主标题·金句 */
-   --font-kai:           "LXGW WenKai", "Noto Serif SC", serif; /* 人文楷体角色；默认不用手账字承担信息标题 */
-   /* —— 手写体分两档：全部来自官方 OFL 项目，草书只留给大字 hero —— */
-   --font-write:         "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* 仅真实手写语义：批注、便签、课堂板书 */
-   --font-write-cursive: "Liu Jian Mao Cao", "Long Cang", "Ma Shan Zheng", cursive; /* Google Fonts OFL 草书/行书，只用于大字 */
-   --font-playful:       "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;     /* 站酷快乐体:活泼/消费/儿童/漫画 */
-   --font-round:         "ZCOOL QingKe HuangYou", "ZCOOL KuaiLe", "Noto Sans SC", sans-serif; /* Google Fonts OFL 圆润/趣味展示 */
+  --font-title: var(--font-sans);   /* Sans by default; cover/hero may intentionally choose serif, heavy sans, or calligraphy. */
+  /* —— Display, calligraphic, and handwritten faces ——
+     Use only registered OFL-1.1 fonts. Covers and hero pages may combine distinct roles deliberately:
+     calligraphic title, heavy sans hero, serif/kai label, and handwritten annotation.
+     Use --font-sans for body/chart labels, --font-number for large KPIs/chapter numerals, and --font-mono only for technical IDs.
+     font_bundle.py maps the selected roles to portable deck-local WOFF2 files at delivery time. */
+   --font-hei-heavy:     "Noto Sans SC", "Smiley Sans", sans-serif;      /* Noto 900 by default; use Smiley Sans only when explicitly selected. */
+   --font-brush:         "Ma Shan Zheng", "Noto Serif SC", cursive;      /* Brush display for culture, travel, tradition, and humanist quotations. */
+   --font-kai:           "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* Clear handwritten display for chapters, quotations, and humanist titles; declare intentional use */
+   /* —— Two handwriting tiers; reserve cursive faces for large hero text only. —— */
+   --font-write:         "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* Notes, short quotations, and short display text; never formal body copy */
+   --font-write-cursive: "Liu Jian Mao Cao", "Long Cang", "Ma Shan Zheng", cursive; /* Google Fonts OFL cursive faces; large display text only. */
+   --font-playful:       "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;     /* Playful display for youth, consumer, children, and comics. */
+   --font-round:         "ZCOOL QingKe HuangYou", "ZCOOL KuaiLe", "Noto Sans SC", sans-serif; /* Rounded display for friendly or playful themes. */
    --font-jotter:        "Xiaolai", "Zhi Mang Xing", "Long Cang", cursive; /* 清晰手账默认小赖；狂放字体仅作短促点缀 */
    --font-display-serif: "Fraunces", "Noto Serif SC", serif;            /* Fraunces:编辑/杂志展示衬线 */
   --font-grotesque:     "Archivo", "Noto Sans SC", sans-serif;         /* Archivo:现代无衬线展示 */

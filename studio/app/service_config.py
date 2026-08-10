@@ -54,9 +54,7 @@ def system_runtime_env() -> dict[str, str]:
         image_provider = DEFAULT_IMAGE_PROVIDER
     if image_url:
         env["IMAGE_BASE_URL"] = image_url.rstrip("/")
-        env["OPENAI_BASE_URL"] = image_url.rstrip("/")
     if image_key:
-        env["OPENAI_API_KEY"] = image_key
         env["IMAGE_API_KEY"] = image_key
     if image_model:
         env["IMAGE_MODEL"] = image_model
@@ -265,7 +263,7 @@ def public_payload(user_id: int) -> dict:
         and image.get("model") and image.get("api_key_enc")
     )
     system_image_available = bool(
-        system.get("OPENAI_BASE_URL") and system.get("OPENAI_API_KEY")
+        system.get("IMAGE_BASE_URL") and system.get("IMAGE_API_KEY")
         and system.get("IMAGE_MODEL")
     )
     personal_search_available = bool(
@@ -370,8 +368,6 @@ def runtime_env(user_id: int) -> dict[str, str]:
         env.update({
             "IMAGE_PROVIDER": image["provider"],
             "IMAGE_BASE_URL": image["base_url"],
-            "OPENAI_BASE_URL": image["base_url"],
-            "OPENAI_API_KEY": image["api_key"],
             "IMAGE_API_KEY": image["api_key"],
             "IMAGE_MODEL": image["model"],
         })

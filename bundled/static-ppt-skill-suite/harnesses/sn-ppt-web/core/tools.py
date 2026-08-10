@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Long-Horizon Presenter 专属 Harness 的叶子工具与工具 schema。
+"""sn-ppt-web 专属 Harness 的叶子工具与工具 schema。
 
 ⚠️ 本文件的工具 **schema 严格对齐 hermes-agent**(tools/*.py):工具名称、描述、parameters
 逐字照搬 hermes 的 `{name, description, parameters}`(OpenAI 风格 parameters,**不是** Anthropic
@@ -33,6 +33,31 @@ import requests
 
 IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 FOREGROUND_MAX_TIMEOUT = int(os.environ.get("TERMINAL_MAX_FOREGROUND_TIMEOUT", "600"))  # 对齐 hermes 默认 600
+
+
+class ImagePolicyRejected(RuntimeError):
+    """The image provider rejected the request/result for safety policy reasons.
+
+    This is deliberately distinct from transient transport failures. Retrying
+    the exact same prompt cannot make a policy decision healthier and only
+    wastes latency/quota; the Image Agent must first rewrite the brief.
+    """
+
+
+def _image_policy_code(payload):
+    """Return a normalized provider policy code from a JSON error payload."""
+    if not isinstance(payload, dict):
+        return ""
+    error = payload.get("error")
+    candidates = [payload]
+    if isinstance(error, dict):
+        candidates.insert(0, error)
+    for item in candidates:
+        for key in ("error_code", "code", "type"):
+            value = str(item.get(key) or "").strip().lower()
+            if value:
+                return value
+    return ""
 
 
 def _record_asset_provenance(agent, rel, *, origin, source_url=None,
@@ -667,8 +692,23 @@ def _image_api_request(agent, prompt, size, aspect_ratio=None):
     # the timeout per request (one image) so a slow image does not prematurely
     # fail an otherwise healthy generation task.
     response = requests.post(endpoint, headers=headers, json=body, timeout=600)
+    try:
+        payload = response.json()
+    except (TypeError, ValueError):
+        payload = None
+    status_code = int(getattr(response, "status_code", 200) or 200)
+    policy_code = _image_policy_code(payload)
+    if status_code == 451 or policy_code in {
+        "image_unsafe",
+        "content_policy_violation",
+        "content_policy_rejected",
+        "safety_violation",
+    }:
+        raise ImagePolicyRejected(
+            "IMAGE_POLICY_REJECTED：生图服务拒绝了当前提示词或生成结果。"
+            "不要原样重试；请保留视觉意图并安全改写提示词，最多再尝试一次。"
+        )
     response.raise_for_status()
-    payload = response.json()
     if not isinstance(payload, dict):
         raise ValueError("生图服务返回的不是 JSON 对象")
     return payload
@@ -758,6 +798,11 @@ def _image_gen_one(agent, prompt, size, aspect_ratio=None):
         try:
             payload = _image_api_request(agent, prompt, size, aspect_ratio)
             data = _image_bytes_from_payload(payload)
+        except ImagePolicyRejected as e:
+            return (
+                f"{e} 若改写后仍被拒绝，请改用真实图片检索、已有素材、"
+                "非人物视觉或 Canvas/排版方案，不要尝试绕过安全过滤器。"
+            )
         except Exception as e:
             last_err = str(e)[:160]
             data = None
@@ -1165,12 +1210,14 @@ def dispatch(agent, name, args):
         if language == "en":
             return (
                 f"{name} is unavailable during {role or 'role'} stall finalization. "
-                "Use only the permitted closeout artifact, then return the structured "
-                "blocked/partial contract required by the role."
+                "Use only the permitted closeout artifact, then return the exact structured "
+                "role contract from existing evidence. Report ready when its gates are already "
+                "satisfied; otherwise report the truthful partial/blocked state."
             )
         return (
             f"{role or '当前角色'} 停滞收口阶段不再允许 {name}。"
-            "请只写允许的收口产物，随后返回角色要求的 blocked/partial 结构化合同。"
+            "请只写允许的收口产物，随后基于已有证据返回角色卡要求的完整结构化合同；"
+            "门槛已经满足则如实 ready，否则如实 partial/blocked。"
         )
     if name in agent.extra_tools:
         return agent.extra_tools[name](**args)

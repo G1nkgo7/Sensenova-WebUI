@@ -42,7 +42,7 @@ Validate the final crop in the PNG. Never place essential text over a face, prod
 
 ## 2 · Typography
 
-- Assign explicit roles: display, title, body, caption, numeric, and optional monospace.
+- Build typography from the occasion instead of flattening every deck into one default pair. Expressive covers, heroes, and dividers may coordinate three or four stable roles—display, Chinese title, body, numeric, or one short accent—while formal decks should converge on two or three. More roles never permit mixed families inside one Chinese phrase. For a modern editorial or experimental direction, Unbounded or Syne may carry Latin display, Archivo may carry numbers and compact Latin labels, and Noto Sans SC should carry Chinese and body copy.
 - Keep each Chinese sentence, title, conclusion, button, and label in one family. Emphasis changes color, weight, size, or decoration rather than switching a few glyphs to another family.
 - Playful, rounded, handwritten, and calligraphic CJK type is opt-in only when the topic and audience support it. Mark intentional uses with `.is-expressive-type` or `data-type-intent="expressive"`; otherwise use a registered Noto Sans/Serif SC role.
 - Chinese eyebrows, departments, sources, footers, and metadata use sans/serif with near-normal tracking. Reserve mono and wide all-caps tracking for genuinely Latin technical content.

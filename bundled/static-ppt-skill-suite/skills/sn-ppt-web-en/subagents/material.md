@@ -22,7 +22,6 @@ Stage every input through the shared parser:
 python ${SKILL_DIR:-skills/sn-ppt-web-en}/scripts/stage_materials.py materials/_work/<assignment_id> \
   --input materials/_raw/<file-a> --input materials/_raw/<file-b>
 ```
-
 Consume the resulting `catalog.json` by type:
 
 | Input | Required handling |

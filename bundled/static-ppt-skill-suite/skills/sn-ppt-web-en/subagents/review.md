@@ -43,7 +43,6 @@ Review may modify affected page HTML, affected page plans, `base.css` only when 
 ```bash
 python ${SKILL_DIR:-skills/sn-ppt-web-en}/scripts/deck.py build . --expected <slide-count>
 ```
-
 6. If pages change after a blocked review, revalidate the changed pages and replace the stale contract with a new final contract. Never reject a repaired deck solely because an earlier pre-repair contract was blocked.
 
 ## 5. Review principles

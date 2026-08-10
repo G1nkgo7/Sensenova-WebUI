@@ -1,6 +1,6 @@
 # SenseNova Present WebUI
 
-SenseNova Present WebUI is a self-hosted AI presentation workspace. The public V1 release focuses on static HTML presentations and exposes one `sn-ppt-web` workflow. Its `long-horizon-presenter` Harness detects the query language and selects the frozen `sn-ppt-web-zh` or `sn-ppt-web-en` Skill package.
+SenseNova Present WebUI is a self-hosted AI presentation workspace. The public V1 release focuses on static HTML presentations and exposes one `sn-ppt-web` workflow. Its `sn-ppt-web` Harness detects the query language and selects the frozen `sn-ppt-web-zh` or `sn-ppt-web-en` Skill package.
 
 The primary documentation is available in [Chinese](README.md). This page provides a concise English setup guide.
 
@@ -12,7 +12,8 @@ The primary documentation is available in [Chinese](README.md). This page provid
 - Configure an OpenAI-compatible multimodal model from `.env` or the WebUI.
 - Optionally connect image-generation and Serper-compatible search services.
 - Use the fully tested macOS path, or the provided Linux, WSL2, and Windows Docker Desktop launch paths.
-- Install 42 bundled OFL/open-source presentation fonts without network access.
+- Install 45 bundled OFL/open-source presentation fonts without network access.
+- The bundled registry now includes Smiley Sans and IBM Plex Sans; unbundled Inter, JetBrains Mono, and Source Han Sans/Serif are not declared as delivery fonts.
 
 > V1 runs without authentication and stores data locally. Do not expose it directly to an untrusted public network.
 

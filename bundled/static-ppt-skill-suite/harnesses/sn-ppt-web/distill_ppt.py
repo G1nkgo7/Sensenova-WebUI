@@ -5,7 +5,7 @@
 (seed→brief、编排器装配、拒绝采样验收)。通用 agent 运行时在 core/(agent/tools/trace),
 本文件是它唯一认识 "PPT" 的薄外壳——换领域只改本文件 + skills/。
 
-teacher 模型(Claude Opus)按 skills/long-horizon-presenter 自主生成整套 HTML 幻灯片,轨迹经**拒绝采样**
+teacher 模型(Claude Opus)按 skills/sn-ppt-web 自主生成整套 HTML 幻灯片,轨迹经**拒绝采样**
 落库:编排器负责规划、按设计亲缘页组委派并运行确定性收口脚本(不许写 slides/),并行 Slide Group 写/渲/自纠自己的页面。
 
 每条 seed = 一个 sample,跑在**独立子进程 + 独立 run 目录**里,进程级全局/playwright/cwd 永不串台:
@@ -247,7 +247,7 @@ def _snapshot_skill(run_dir, skill_name=None):
 
 def _workspace_skills_root(ws):
     root = os.path.join(ws, "skills")
-    for skill_name in (*SKILL_BY_LANGUAGE.values(), "long-horizon-presenter"):
+    for skill_name in (*SKILL_BY_LANGUAGE.values(), "sn-ppt-web"):
         if os.path.isfile(os.path.join(root, skill_name, "SKILL.md")):
             return root
     return SKILLS_DIR
@@ -258,12 +258,12 @@ def _workspace_skill_name(ws):
     try:
         with open(manifest_path, "r", encoding="utf-8") as stream:
             selected = str(json.load(stream).get("skill") or "")
-        if selected in {*SKILL_BY_LANGUAGE.values(), "long-horizon-presenter"}:
+        if selected in {*SKILL_BY_LANGUAGE.values(), "sn-ppt-web"}:
             return selected
     except (OSError, ValueError, TypeError):
         pass
     root = _workspace_skills_root(ws)
-    for skill_name in (*SKILL_BY_LANGUAGE.values(), "long-horizon-presenter"):
+    for skill_name in (*SKILL_BY_LANGUAGE.values(), "sn-ppt-web"):
         if os.path.isfile(os.path.join(root, skill_name, "SKILL.md")):
             return skill_name
     return SKILL_BY_LANGUAGE["zh"]

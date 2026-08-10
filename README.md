@@ -27,7 +27,7 @@ SenseNova Present 是一套可私有部署的 AI 演示文稿工作台。本发�
 
 - **V1 静态演示版**：不展示动态演示入口。
 - **免登录单用户模式**：首次打开即可使用，历史记录保存在本地数据目录。
-- **sn-ppt-web**：前端统一产品名；`long-horizon-presenter` Harness 会按 query 语言自动选择冻结的 `sn-ppt-web-zh` 或 `sn-ppt-web-en` Skill，不依赖开发机上的 AFS 路径。
+- **sn-ppt-web**：前端统一产品名；`sn-ppt-web` Harness 会按 query 语言自动选择冻结的 `sn-ppt-web-zh` 或 `sn-ppt-web-en` Skill，不依赖开发机上的 AFS 路径。
 - **跨平台启动方案**：macOS 已完成实际验证；Linux、WSL2 和 Windows Docker Desktop 提供启动脚本与部署方案，但尚未完成同等强度的全链路回归。
 
 > 模型、生图和搜索服务不包含在 ZIP 中。部署者需要填写自己的兼容 API 地址和密钥。
@@ -79,12 +79,12 @@ SenseNova Present 是一套可私有部署的 AI 演示文稿工作台。本发�
 ## 功能概览
 
 - 从自然语言和附件生成完整的静态 HTML 演示文稿。
-- 使用 `sn-ppt-web`（内部为 `long-horizon-presenter` Harness + `sn-ppt-web-zh/en` 双 Skill）进行长链路规划、素材准备、逐页制作和视觉检查。
+- 使用 `sn-ppt-web` Harness 与 `sn-ppt-web-zh/en` 双语冻结 Skill 进行长链路规划、素材准备、逐页制作和视觉检查。
 - 支持 PDF、Office、Markdown、文本和图片等常用附件。
 - 在 WebUI 中查看制作过程、页面预览、讲稿、检查记录与历史任务。
 - 支持预览、播放以及带资源和字体的 HTML 导出。
 - 主模型可从 `.env` 注入，也可在 WebUI 中添加和删除；生图与搜索能力可选。
-- 内置 42 个白名单 OFL/开源字体，字体准备阶段可离线完成。
+- 内置 45 个白名单 OFL/开源字体，字体准备阶段可离线完成。
 - 默认深色主题，同时支持浅色主题和中英文界面。
 
 > 当前公开版本是 V1：仅开放静态演示、免登录、本地单用户模式。请勿直接暴露到不受信任的公网。
@@ -96,8 +96,8 @@ SenseNovaPresent-WebUI-.../
 ├── bundled/static-ppt-skill-suite/
 │   ├── skills/sn-ppt-web-zh/
 │   ├── skills/sn-ppt-web-en/
-│   ├── skills/long-horizon-presenter/  # 安装兼容入口
-│   └── harnesses/long-horizon-presenter/
+│   ├── skills/sn-ppt-web/  # 安装兼容入口
+│   └── harnesses/sn-ppt-web/
 ├── studio/                    FastAPI、前端和本地数据
 ├── inference/                 WebUI 到静态 Harness 的最小推理适配层
 ├── docs/
@@ -142,7 +142,7 @@ Windows 推荐以下任一方式：
 1. **Docker Desktop（最省心）**：Windows 10/11 + WSL2 backend。
 2. **WSL2 Ubuntu**：在 WSL 终端中按 Linux 步骤启动。
 
-`start.ps1` 可以原生启动 WebUI，但 sn-ppt-web（内部实现为 `long-horizon-presenter`）的生成工具使用 POSIX shell 与
+`start.ps1` 可以原生启动 WebUI，但 `sn-ppt-web` 的生成工具使用 POSIX shell 与
 Unix 文件锁。需要完整生成能力时请使用 Docker Desktop 或 WSL2，不建议裸 Windows Python。
 当前 Windows 相关方式尚未完成与 macOS 同等强度的全链路回归，请先运行 Smoke Case。
 
@@ -215,7 +215,9 @@ chmod +x start.sh
 7. 启动 `http://127.0.0.1:8001`。
 
 上述完整准备只在首次运行或运行环境缺失时执行，产物位于 `runtime/`，不会写入源码目录。
-发布 ZIP 已内置 42 个经过白名单校验的 OFL/开源字体，因此字体安装不依赖网络；
+发布 ZIP 已内置 45 个经过白名单校验的 OFL/开源字体，因此字体安装不依赖网络；
+其中已补齐 Skill 正向声明的 Smiley Sans 与 IBM Plex Sans；未随包提供的 Inter、JetBrains Mono、
+Source Han Sans/Serif 已从字体声明中移除。
 为控制授权风险，开发机上的商业字体和来源不明字体不会被打入发布包。
 生图与联网搜索是可选能力：未配置时仍可生成，页面会给出一次非阻塞提示，Skill 按现有能力降级。
 
@@ -295,13 +297,13 @@ export SENSENOVA_MODEL_DISPLAY_NAME="My multimodal model"
 发布版会自动选择：
 
 ```dotenv
-PPTAGENT_PUBLIC_SKILL_KEYS=long-horizon-presenter
-PPTAGENT_DEFAULT_SKILL=long-horizon-presenter
+PPTAGENT_PUBLIC_SKILL_KEYS=sn-ppt-web
+PPTAGENT_DEFAULT_SKILL=sn-ppt-web
 ```
 
 一般无需设置 Skill 路径；启动器会自动发现
 `bundled/static-ppt-skill-suite`。维护外置版本时才覆盖
-`PPTAGENT_LONG_HORIZON_PRESENTER_SUITE_ROOT`。
+`PPTAGENT_SN_PPT_WEB_SUITE_ROOT`。
 
 ## 6. 数据、升级与备份
 
@@ -337,7 +339,7 @@ curl http://127.0.0.1:8001/healthz
 然后创建一个 2–3 页 Smoke Case，确认：
 
 - 首页只显示静态演示；
-- Skill 在界面显示为 sn-ppt-web，内部 WebUI 键为 `long-horizon-presenter`；Harness 根据 query 语言读取 `sn-ppt-web-zh` 或 `sn-ppt-web-en`；
+- Skill 在界面显示为 sn-ppt-web，内部 WebUI 键为 `sn-ppt-web`；Harness 根据 query 语言读取 `sn-ppt-web-zh` 或 `sn-ppt-web-en`；
 - 生成过程可见；
 - 页面预览、播放、讲稿和导出可用；
 - 导出包含 `present.html` 及所需资源。

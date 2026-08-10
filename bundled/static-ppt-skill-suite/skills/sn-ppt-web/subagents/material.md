@@ -21,7 +21,7 @@ goal 会给出：`assignment_id`、deck 主题、确切附件路径、独立工�
 1. 用独立目录处理 goal 列出的附件，每个路径显式传一个 `--input`：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/stage_materials.py materials/_work/<assignment_id> \
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/stage_materials.py materials/_work/<assignment_id> \
      --input materials/_raw/<file-a> --input materials/_raw/<file-b>
    ```
 

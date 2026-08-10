@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Long-Horizon Presenter 的 agent 运行时与委派适配层。
+"""sn-ppt-web 的 agent 运行时与委派适配层。
 
 - `Agent`:单 agent 的状态 + 沙箱(safe/read_path/writable)+ 模型客户端 + 一个 Trace。
 - `run_loop(agent)`:**纯** ReAct 循环(模型 → 工具 → 模型),模型不再调工具即收尾,或到 max_turns;不替模型兜底。
@@ -1058,7 +1058,7 @@ def run_loop(agent):
         finalization_only = bool(getattr(agent, "_finalization_only", False))
         label_lower = str(getattr(agent, "label", "") or "").lower()
         finalization_role = next(
-            (kind for kind in ("material", "research", "review", "slide")
+            (kind for kind in ("material", "research", "image", "review", "slide")
              if label_lower.startswith(kind)),
             "",
         )
@@ -1076,29 +1076,48 @@ def run_loop(agent):
         elif stalled and role_can_finalize and not finalization_only:
             agent._finalization_only = True
             agent._finalization_role = finalization_role
-            if finalization_role in {"review", "slide"}:
-                # A visually stalled worker may report what remains, but it may not
-                # turn a missing final pixel proof into a synthetic ready verdict.
-                agent._stall_forced_status = "blocked"
             agent._stalled_finalize_rounds = 0
             agent._blocked_no_progress = 0
             language = str(getattr(agent, "prompt_language", "zh") or "zh").lower()
             if finalization_role == "review":
                 instruction = (
-                    "停滞保护已关闭继续看图、渲染和页面修改。只把已发现问题写入唯一 "
-                    "_trace/review-issues.md，然后返回 status: blocked；不得返回 ready。"
+                    "停滞保护已关闭继续看图、渲染和页面修改。只使用已经取得的新鲜像素证据，"
+                    "把已发现问题与覆盖范围写入唯一 _trace/review-issues.md，然后按 Review "
+                    "角色卡原样返回完整结构化合同。若全部页面已覆盖、最终像素仍新鲜且 remaining "
+                    "为 none，应如实返回 status: ready；只有证据缺失或仍有真实问题时才返回 blocked。"
+                    "不得虚构检查结果，也不得继续调用证据工具。"
                     if language != "en" else
                     "Stall protection has closed further vision, rendering, and page edits. "
-                    "Write the known issues to _trace/review-issues.md, then return status: "
-                    "blocked. You may not return ready."
+                    "Use only the fresh pixel evidence already obtained, write the known issues "
+                    "and inspected scope to _trace/review-issues.md, then return the exact complete "
+                    "Review contract from the role card. Return status: ready when all pages were "
+                    "covered, final pixels are fresh, and remaining is none; return blocked only "
+                    "for real unresolved issues or missing evidence. Do not fabricate evidence or "
+                    "call more evidence tools."
                 )
             elif finalization_role == "slide":
                 instruction = (
-                    "停滞保护已关闭继续看图、渲染和修改。用已有证据返回 status: blocked，"
-                    "列明未解决页面；不得再写页面或返回 ready。"
+                    "停滞保护已关闭继续看图、渲染和修改。只使用已有产物与新鲜像素证据，按 Slide "
+                    "角色卡原样返回完整结构化合同。所属页面、渲染和最终像素证据均完整且无硬伤时"
+                    "如实返回 status: ready；否则返回 blocked 并列明真实缺口。不得继续调用工具。"
                     if language != "en" else
-                    "Stall protection has closed further vision, rendering, and edits. Return "
-                    "status: blocked with the unresolved pages; do not write pages or return ready."
+                    "Stall protection has closed further vision, rendering, and edits. Use only "
+                    "existing artifacts and fresh pixel evidence, then return the exact complete "
+                    "Slide contract from the role card. Return status: ready when assigned pages, "
+                    "renders, and final pixels are complete and clean; otherwise return blocked "
+                    "with the real gaps. Do not call more tools."
+                )
+            elif finalization_role == "image":
+                instruction = (
+                    "停滞保护已关闭继续搜图、生图、下载和看图。根据已有素材文件与 catalog 状态，"
+                    "按 Image 角色卡原样返回完整结构化合同：计划素材均已就绪且路径存在时返回 "
+                    "status: ready；否则返回 blocked 并逐项列明缺口。不得继续调用工具或虚构素材。"
+                    if language != "en" else
+                    "Stall protection has closed further search, generation, download, and vision. "
+                    "Use the existing asset files and catalog state to return the exact complete "
+                    "Image contract from the role card: status: ready only when every planned asset "
+                    "exists and is ready; otherwise return blocked with explicit gaps. Do not call "
+                    "more tools or invent assets."
                 )
             else:
                 instruction = (
@@ -1116,7 +1135,7 @@ def run_loop(agent):
             agent._stalled_finalize_rounds = int(
                 getattr(agent, "_stalled_finalize_rounds", 0) or 0
             ) + 1
-            stop_after_results = agent._stalled_finalize_rounds >= 2
+            stop_after_results = agent._stalled_finalize_rounds >= 4
         elif stalled:
             stop_after_results = True
         if THINK_NUDGE_EACH_TOOL and isinstance(_tool_content, list):
@@ -1157,7 +1176,7 @@ def run_loop(agent):
 # ============= 委派子 agent(自由函数,操作一个 agent) =============
 
 def _normalize_task(t):
-    """归一化 Long-Horizon Presenter 的子任务并补齐角色必需能力。"""
+    """归一化 sn-ppt-web 的子任务并补齐角色必需能力。"""
     if not isinstance(t, dict):
         t = {"goal": str(t)}
     goal = str(t.get("goal") or "")
@@ -1956,9 +1975,6 @@ def _child_contract_error(parent, child, kind, contract):
         unresolved = str(contract.get("unresolved") or "").strip().lower()
         if status == "partial" and unresolved in {"", "none", "n/a", "not-applicable"}:
             return "Research partial 必须明确 unresolved，供 grounded-knowledge 传播"
-    forced = str(getattr(child, "_stall_forced_status", "") or "").lower()
-    if forced and status != forced:
-        return f"停滞收口后的 {kind} 只能返回 status: {forced}，不得返回 {status or 'missing'}"
     return ""
 
 

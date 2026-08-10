@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HTML -> PNG 渲染脚本(long-horizon-presenter 自带,可移植)。
+"""HTML -> PNG 渲染脚本(sn-ppt-web 自带,可移植)。
 
 任何有 shell / 代码执行能力的脚手架都能直接跑它来渲染一页幻灯片,**不依赖宿主提供 render 工具**:
 

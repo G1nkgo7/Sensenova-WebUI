@@ -88,7 +88,7 @@ Read `fonts.md` only when default role selection is insufficient or the occasion
 
 Regardless of whether `fonts.md` is opened, Chinese eyebrows, department names, footers, sources, and metadata must use `--font-sans` or `--font-serif` with `0–0.03em` tracking. Reserve `--font-mono`, `--tracking-caps`, and `.is-latin-label` for genuinely Latin technical labels, code, coordinates, and identifiers.
 
-Keep every Chinese title, conclusion, button, or short label in one font family. Emphasize words with color, weight, size, or an underline—not by switching a few characters to a cartoon, handwritten, or second display family. Playful, rounded, handwritten, and calligraphic CJK fonts are opt-in only for children, comics, crafts, classroom boards, personal journals, or an explicit user request. Mark each intentional use with `.is-expressive-type` or `data-type-intent="expressive"` so deterministic review can distinguish art direction from an accidental fallback.
+Keep every Chinese title, conclusion, button, or short label in one font family. Emphasize words with color, weight, size, or an underline—not by switching a few characters to a cartoon, handwritten, or second display family. Let the occasion and Style Lock choose the system: expressive covers, heroes, and dividers may coordinate three or four clearly assigned roles, while formal decks should converge on two or three. Do not flatten every deck into the same sans/serif pair. Playful, rounded, handwritten, and calligraphic CJK fonts remain opt-in when the topic and audience genuinely support them. Mark each intentional use with `.is-expressive-type` or `data-type-intent="expressive"` so deterministic review can distinguish art direction from an accidental fallback.
 
 ### 1.6 Visual medium priority
 

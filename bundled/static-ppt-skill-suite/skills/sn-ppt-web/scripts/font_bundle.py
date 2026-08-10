@@ -54,6 +54,10 @@ FAMILY_FACES: dict[str, tuple[Face, ...]] = {
         Face(("IBMPlexMono-Regular.ttf",), "400"),
         Face(("IBMPlexMono-SemiBold.ttf",), "600"),
     ),
+    "IBM Plex Sans": (
+        Face(("IBMPlexSans_2.ttf",), "400"),
+        Face(("IBMPlexSans_1.ttf",), "500"),
+    ),
     "Archivo": (Face(("Archivo.ttf", "Archivo[wdth,wght].ttf"), "100 900"),),
     "Fraunces": (Face(("Fraunces.ttf", "Fraunces[SOFT,WONK,opsz,wght].ttf"), "100 900"),),
     "Spectral": (
@@ -121,6 +125,7 @@ FONT_LICENSES: dict[str, dict[str, str]] = {
     "Noto Sans SC": {"license": "OFL-1.1", "source": _google_font_source("notosanssc")},
     "Noto Serif SC": {"license": "OFL-1.1", "source": _google_font_source("notoserifsc")},
     "IBM Plex Mono": {"license": "OFL-1.1", "source": _google_font_source("ibmplexmono")},
+    "IBM Plex Sans": {"license": "OFL-1.1", "source": _google_font_source("ibmplexsans")},
     "Archivo": {"license": "OFL-1.1", "source": _google_font_source("archivo")},
     "Fraunces": {"license": "OFL-1.1", "source": _google_font_source("fraunces")},
     "Spectral": {"license": "OFL-1.1", "source": _google_font_source("spectral")},

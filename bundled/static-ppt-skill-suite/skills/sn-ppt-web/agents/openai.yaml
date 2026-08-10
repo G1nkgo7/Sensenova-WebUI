@@ -1,0 +1,4 @@
+interface:
+  display_name: "sn-ppt-web"
+  short_description: "Create or edit polished HTML slide decks"
+  default_prompt: "Use $sn-ppt-web to create or edit this HTML slide deck, route the work by complexity, and deliver a page-aligned speaker script."

@@ -214,6 +214,14 @@ function refreshDeckListWhenIdle(active) {
 
 const SUGGESTION_POOL = [
   {
+    label: "城市户外品牌 · 中庭快闪提案",
+    query: `下周我们要去跟商场的招商总监谈一个核心中庭的快闪店位置。我们是一个全新的城市户外品牌，要让商场相信我们能吸引最高净值的年轻客流。请帮我做一份20页左右的入驻提案PPT。
+第一部分不讲常规的品牌故事，直接放满墙的穿搭图，讲山系机能风怎么成了现在一线城市新中产的标配。
+第二部分讲我们的空间策展概念。不要普通货架，我们要在商场中庭搭一个带溪流的室内原始森林，并把空间效果图放上去。
+第三部分讲客群和社群运营。我们不仅卖冲锋衣，周末还会组织飞盘、露营和溯溪，重点强调超高复购率和高客单价。最后给商场展示商业回报，测算一个月快闪能为商场带来的全网曝光量、小红书打卡数和预估GMV。
+排版采用最前沿的山系机能潮流风，抛弃传统PPT的规矩感。底色用岩石灰或水泥灰，搭配极具视觉冲击力的荧光橙或荧光绿作为点缀。图片要混搭：一半是粗犷的高清雪山、森林摄影，一半是极具工业感的反光面料微距图。字体使用极其粗犷的黑体，字号要特别大，像街头潮流海报的大字报排版。整体要有强烈的野性质感。`,
+  },
+  {
     label: "山系度假民宿 · 招商与 OTA",
     query: `我新开了一家山系度假民宿，需要一份25页左右的产品介绍资料PPT，用于招商洽谈和OTA平台上架资料参考。
 内容上包括民宿招商该有的板块：选址与环境卖点、房型配置与定价策略、配套设施与体验活动、目标客群画像、淡旺季运营思路、合规资质与安全保障，其他你判断该补的也一并补齐。
@@ -1647,7 +1655,7 @@ function modelLabel(key) {
 const PIPELINE_LABEL = {
   infer: "Clean infer harness",
   "visual-craft-harness": "Visual Craft Harness",
-  "long-horizon-presenter-harness": "sn-ppt-web harness",
+  "sn-ppt-web-harness": "sn-ppt-web harness",
   "mural-presenter-harness": "sn-ppt-web harness",
   "sense-present-standard-harness": "SenseNova Static HTML Harness",
   "sense-present-dazzle-harness": "SenseNova Dynamic HTML Harness",
@@ -1662,7 +1670,7 @@ const SKILL_LABEL = {
   "long-horizon-grouped": "Long-horizon HTML PPT Grouped",
   "long-horizon-grouped-inline-image": "Long-horizon Grouped · Inline Image",
   "visual-craft": "Visual Craft HTML PPT",
-  "long-horizon-presenter": "sn-ppt-web",
+  "sn-ppt-web": "sn-ppt-web",
   "mural-presenter": "sn-ppt-web",
 };
 
@@ -2886,7 +2894,7 @@ function taskConfigData() {
     runtime = `${maxTokens.toLocaleString()} Tokens/轮 · 主 Agent ${mainTurns.toLocaleString()} 轮`;
   } else if (childRaw > 0) {
     runtime = `${maxTokens.toLocaleString()} Tokens/轮 · 主 Agent ${mainTurns.toLocaleString()} 轮 · 子 Agent ${childRaw.toLocaleString()} 轮`;
-  } else if (skillKey === "long-horizon-presenter" || skillKey === "mural-presenter") {
+  } else if (skillKey === "sn-ppt-web" || skillKey === "mural-presenter") {
     runtime = `${maxTokens.toLocaleString()} Tokens/轮 · 主 Agent ${mainTurns.toLocaleString()} 轮 · 页面子 Agent 36–120 轮 · 其他子 Agent ${mainTurns.toLocaleString()} 轮`;
   } else if (skillKey === "visual-craft") {
     runtime = `${maxTokens.toLocaleString()} Tokens/轮 · 主 Agent ${mainTurns.toLocaleString()} 轮 · 页面子 Agent 28 轮 · 其他子 Agent ${mainTurns.toLocaleString()} 轮`;

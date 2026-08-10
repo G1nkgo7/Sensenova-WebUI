@@ -1,4 +1,0 @@
-interface:
-  display_name: "Long-Horizon Presenter"
-  short_description: "Create or edit polished HTML slide decks"
-  default_prompt: "Use $long-horizon-presenter to create or edit this HTML slide deck, route the work by complexity, and deliver a page-aligned speaker script."

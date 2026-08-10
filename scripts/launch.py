@@ -112,7 +112,7 @@ def _prepare_presenter_runtime(engine_python: Path, playwright_root: Path) -> tu
     fonts_dir = runtime_root / "fonts"
     install_script = (
         BUNDLED_PRESENTER_SUITE
-        / "skills/long-horizon-presenter/scripts/install.sh"
+        / "skills/sn-ppt-web/scripts/install.sh"
     )
     if _presenter_runtime_ready(normalize_python, fonts_dir):
         return normalize_python, fonts_dir
@@ -216,8 +216,8 @@ def main() -> int:
     pipeline_root = Path(
         os.environ.get("PPTAGENT_CLEAN_PIPELINE_ROOT", PROJECT_ROOT / "vendor/static_ppt-clean-current")
     ).expanduser().resolve()
-    bundled_skill = BUNDLED_PRESENTER_SUITE / "skills" / "long-horizon-presenter" / "SKILL.md"
-    bundled_harness = BUNDLED_PRESENTER_SUITE / "harnesses" / "long-horizon-presenter" / "distill_ppt.py"
+    bundled_skill = BUNDLED_PRESENTER_SUITE / "skills" / "sn-ppt-web" / "SKILL.md"
+    bundled_harness = BUNDLED_PRESENTER_SUITE / "harnesses" / "sn-ppt-web" / "distill_ppt.py"
     has_bundled_presenter = bundled_skill.is_file() and bundled_harness.is_file()
     if not has_bundled_presenter and not (pipeline_root / "infer.py").is_file():
         raise SystemExit(
@@ -293,10 +293,10 @@ def main() -> int:
         })
     if has_bundled_presenter:
         defaults.update({
-            "PPTAGENT_LONG_HORIZON_PRESENTER_SUITE_ROOT": str(BUNDLED_PRESENTER_SUITE),
-            "PPTAGENT_PUBLIC_SKILL_KEYS": "long-horizon-presenter",
-            "PPTAGENT_DEFAULT_SKILL": "long-horizon-presenter",
-            "PPTAGENT_LONG_HORIZON_PRESENTER_DISPLAY_NAME": "sn-ppt-web",
+            "PPTAGENT_SN_PPT_WEB_SUITE_ROOT": str(BUNDLED_PRESENTER_SUITE),
+            "PPTAGENT_PUBLIC_SKILL_KEYS": "sn-ppt-web",
+            "PPTAGENT_DEFAULT_SKILL": "sn-ppt-web",
+            "PPTAGENT_SN_PPT_WEB_DISPLAY_NAME": "sn-ppt-web",
         })
     for key, value in defaults.items():
         os.environ.setdefault(key, value)

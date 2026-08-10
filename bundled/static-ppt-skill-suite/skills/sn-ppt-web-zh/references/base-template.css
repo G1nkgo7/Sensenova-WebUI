@@ -57,9 +57,9 @@
      正文/图表标注用 --font-sans；大 KPI/章节数字用 --font-number；技术编号才用 --font-mono。创作时使用本地栈；交付时 font_bundle.py 将实际角色映射为 Deck 自带 WOFF2。 */
    --font-hei-heavy:     "Noto Sans SC", "Smiley Sans", sans-serif;      /* 默认 Noto 900；得意黑仅在明确选用且已装时使用，二者均 OFL */
    --font-brush:         "Ma Shan Zheng", "Noto Serif SC", cursive;      /* 马善政毛笔:文旅/传统/人文 主标题·金句 */
-   --font-kai:           "LXGW WenKai", "Noto Serif SC", serif; /* 人文楷体角色；默认不用手账字承担信息标题 */
+   --font-kai:           "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* 清晰硬笔感章节、引言与人文标题；使用时须符合场景并显式声明 */
    /* —— 手写体分两档：全部来自官方 OFL 项目，草书只留给大字 hero —— */
-   --font-write:         "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* 仅真实手写语义：批注、便签、课堂板书 */
+   --font-write:         "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* 工整清晰：批注、引语与短标题；不承担严肃信息正文 */
    --font-write-cursive: "Liu Jian Mao Cao", "Long Cang", "Ma Shan Zheng", cursive; /* Google Fonts OFL 草书/行书，只用于大字 */
    --font-playful:       "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;     /* 站酷快乐体:活泼/消费/儿童/漫画 */
    --font-round:         "ZCOOL QingKe HuangYou", "ZCOOL KuaiLe", "Noto Sans SC", sans-serif; /* Google Fonts OFL 圆润/趣味展示 */

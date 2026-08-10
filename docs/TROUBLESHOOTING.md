@@ -33,7 +33,7 @@ Debian/Ubuntu 缺少系统库时，Docker 构建会使用 `playwright install --
 
 ## Windows 上生成失败
 
-sn-ppt-web（内部使用 `long-horizon-presenter` Harness，并路由到 `sn-ppt-web-zh/en`）依赖 POSIX shell 和 Unix 文件锁。请在 Docker Desktop 或 WSL2 Ubuntu 中
+sn-ppt-web（内部使用 `sn-ppt-web` Harness，并路由到 `sn-ppt-web-zh/en`）依赖 POSIX shell 和 Unix 文件锁。请在 Docker Desktop 或 WSL2 Ubuntu 中
 运行，不要用裸 Windows Python 执行生成任务。
 
 ## Skill 显示不可用
@@ -41,8 +41,8 @@ sn-ppt-web（内部使用 `long-horizon-presenter` Harness，并路由到 `sn-pp
 确认以下文件存在：
 
 ```text
-bundled/static-ppt-skill-suite/skills/long-horizon-presenter/SKILL.md
-bundled/static-ppt-skill-suite/harnesses/long-horizon-presenter/distill_ppt.py
+bundled/static-ppt-skill-suite/skills/sn-ppt-web/SKILL.md
+bundled/static-ppt-skill-suite/harnesses/sn-ppt-web/distill_ppt.py
 ```
 
 运行：

@@ -34,7 +34,7 @@ goal 会给出稳定的 `group_id`，以及每项素材的 `asset_id`、用途�
    复用论文中的命名 Figure 时，不搜索替代图，也不把 `pdf_page_visual/scanned_pdf_page` 整页复制进 PPT。先查看 Material 给出的对应页图，确认 Figure 的完整面板、图内标签、图例和边界，再生成可追溯裁图：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/deck.py material-figure . \
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py material-figure . \
      --source materials/_work/<assignment>/_raw/<paper>_pages/pNNN.png \
      --path assets/<paper>-figure-N.png --figure-id "Figure N" --source-page <N> \
      --box <x0,y0,x1,y1>
@@ -42,36 +42,36 @@ goal 会给出稳定的 `group_id`，以及每项素材的 `asset_id`、用途�
 
    `--box` 使用 0–1 归一化坐标。默认排除论文页眉、正文、页码和长图注；图注若有必要可用 `--caption-mode included`，否则由 Slide 在 HTML 层重写简短说明。命令会拒绝几乎覆盖整页的“裁图”。生成后必须查看实际裁图，确认没有漏面板、切断坐标轴/图例或保留无关正文，再进入素材联系表。
 3. 生成图片：主体先写，风格词收敛为 2–4 个视觉基因；每条 prompt 都复用同一视觉配方，并写明 `no text, no watermark`。多个互不依赖的生成请求放在同一个工具回合提交。
-   `fetch_image` 与 `image_generate` 会把技术来源自动写入 `assets/catalog.json`；不要删除、重写或根据文件名猜来源。复用用户附件中的图片时运行：`python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/deck.py asset-register . --path assets/<name> --origin material --source-path materials/_raw/<name>`；目标尚不存在时该命令会复制原件并完成登记。
+   `fetch_image` 与 `image_generate` 会把技术来源自动写入 `assets/catalog.json`；不要删除、重写或根据文件名猜来源。复用用户附件中的图片时运行：`python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py asset-register . --path assets/<name> --origin material --source-path materials/_raw/<name>`；目标尚不存在时该命令会复制原件并完成登记。
 4. 需要作为人物、产品、物件剪影或拼贴元素悬浮在版面上时，取得候选后运行透明检查：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/image_cutout.py inspect . --asset assets/<file>
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/image_cutout.py inspect . --asset assets/<file>
    ```
 
    已有真实 Alpha 时直接保留；烘焙棋盘格、纯色背景或普通照片需要去背时，输出新文件，禁止覆盖原图：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/image_cutout.py cutout . --asset assets/<file>
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/image_cutout.py cutout . --asset assets/<file>
    ```
 
    `auto` 会依次选择保留 Alpha、清除边缘连通的棋盘格/纯色背景或 GrabCut 主体分割。复杂画面可在看过原图后用 `--subject-box x,y,w,h` 提供 0–1 归一化主体范围。生成后再次对 `*-cutout.png` 运行 `inspect`；只有 `meaningful_alpha: true`，并且 Vision 已查看这份最终文件、确认主体完整、边缘无明显白边/锯齿、没有把棋盘格当透明、也没有残留大块背景，才可返回 `ready`。任务要求透明元素时，普通 RGB/RGBA 全不透明图片不得返回 `ready`；不合格则换更易分离的真图或重生隔离主体，不把失败抠图交给 Slide。
 5. 每个候选路径确定后，先把语义素材 ID 与图片分组写入台账：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/deck.py asset-assign . --path assets/<actual-file> --asset-id <asset_id> --group-id <group_id>
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py asset-assign . --path assets/<actual-file> --asset-id <asset_id> --group-id <group_id>
    ```
 
    全组候选到齐后生成一张带 `asset_id`、尺寸和状态标签的素材联系表：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/deck.py asset-contact . --group-id <group_id>
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py asset-contact . --group-id <group_id>
    ```
 
    默认只对这张联系表执行一次完整 Vision，一次判断全组的内容正确性、视觉一致性、乱码/怪异元素、重复构图、主体比例、裁切安全区与明显水印，并按 `asset_id` 输出 `ready` 与 `needs_review`。检查裁切安全时明确指出每项素材的焦点、`protected_parts` 与可裁背景；缩略图无法判断主体边缘时标为 `needs_review`，不凭感觉放行。随后一次回写状态：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/deck.py asset-review . --group-id <group_id> --ready <id,id> --needs-review <id,id>
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py asset-review . --group-id <group_id> --ready <id,id> --needs-review <id,id>
    ```
 
    只有联系表中被标红、明确要求抠图，或比例/主体完整性无法从缩略图判断的素材，才打开单图复核。已在联系表明确通过的素材不再逐张查看。工具提示“图像已从活跃上下文释放”只表示历史图片字节不再重复发送，刚才的检查结论仍然有效。

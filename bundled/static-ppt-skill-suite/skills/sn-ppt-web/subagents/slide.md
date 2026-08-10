@@ -40,7 +40,7 @@
 4. 只渲染当前页，并实际调用 `vision_analyze` 看该页 PNG。第一次 Vision 必须独立、开放式复述：第一眼焦点与阅读路径；主要视觉载体是否有足够分量；文字、证据视觉和空白分别位于哪里、各自承担什么作用；是否出现“外框铺满但卡片/侧栏内部空洞”、主体被压在半张画布或窄带、应有图片退化成小图标。对位图还要对照 `crop_contract` 复述实际看见的主体：人脸/头顶/手势、产品轮廓/Logo、作品核心对象或证据标签是否仍完整，裁掉的是否仅为允许损失的背景；不能把“图片铺满了”当作裁切正确。随后再检查页面对象、方向、领域证据、结论、遮挡、溢出与字阶。计划为 `dense` 却只占半张画布，或主体图带偶然矩形背景贴在异色画布上，均属于首轮必修。在这次像素判断返回前，不得同回合读取 `render-issues.json`，也不得把“A 是否与 B 重叠”等 bbox 候选写进 Vision 问题。质量判断顺序固定为**新鲜最终 PNG / Vision → DOM 与 computed geometry → 机检候选**；`boxoverflow` 或 bbox 相交本身不是改页命令。先得到不受 lint 锚定的视觉结论，再按需读取结构化诊断并与像素对照：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/render.py --batch . --pages NN
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/render.py --batch . --pages NN
    ```
 
 5. 一次列全当前页问题并合并修改，随后重渲、复看。“首稿 → 首次渲染 → 看图”是初始验收，不算 refine；之后每个“基于已看像素的合并修改 → 重渲 → 复看”才算 1 轮 refine。裁切、底部消失或页脚冲突的诊断顺序固定为：外层 `.slide-body` 的高度所有权与 computed box → 内层 grid/flex 轨道及 `min-height` → 子元素内容量。不得先连续缩卡片、字号和 gap，也不得用主容器 `overflow: hidden` 把超出内容藏掉。一次合并修复后若新 PNG 仍呈现同一硬伤，不继续换一组局部数值；先推翻当前根因假设并检查父级几何。连续两次新鲜渲染没有实质改善时，恢复已验证的最佳版，改用更简单稳定的结构或返回 `blocked`。多数页应在 0–2 轮完成；第 3 轮是软止损线，不再围绕坐标、字号、线条和装饰做微调。这是软约束，不因计数自动失败；但超过它只能为清除仍可见的硬伤，不能为“也许更好看”继续探索。当前页硬伤未清零，或最后一次修改尚未被新像素验证时，不得进入下一页；结构性简化后仍无法清除硬伤时如实 `blocked`。
@@ -48,7 +48,7 @@
 7. 本组全部页面逐页完成后，再批量渲染本组并实际查看组内全部最终 PNG，检查设计亲缘、节奏、重复几何和突兀漂移：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/render.py --batch . --pages NN,NN,NN
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/render.py --batch . --pages NN,NN,NN
    ```
 
    组末调整若改变任何页面，必须重渲并复看变化页；不能用组末总览替代此前的单页验收。

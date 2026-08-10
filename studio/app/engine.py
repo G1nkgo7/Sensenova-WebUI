@@ -57,47 +57,47 @@ VISUAL_CRAFT_HARNESS_ENTRY = os.environ.get(
     "PPTAGENT_VISUAL_CRAFT_HARNESS_ENTRY", "distill_ppt.py"
 )
 VISUAL_CRAFT_MOUNT_ROOT = DATA_DIR / "skill-mounts" / "visual-craft"
-_BUNDLED_LONG_HORIZON_PRESENTER_SUITE_ROOT = (
+_BUNDLED_SN_PPT_WEB_SUITE_ROOT = (
     PROJECT_ROOT / "bundled" / "static-ppt-skill-suite"
 )
-_DEFAULT_LONG_HORIZON_PRESENTER_SUITE_ROOT = (
-    _BUNDLED_LONG_HORIZON_PRESENTER_SUITE_ROOT
+_DEFAULT_SN_PPT_WEB_SUITE_ROOT = (
+    _BUNDLED_SN_PPT_WEB_SUITE_ROOT
     if (
-        _BUNDLED_LONG_HORIZON_PRESENTER_SUITE_ROOT / "skills" / "long-horizon-presenter"
+        _BUNDLED_SN_PPT_WEB_SUITE_ROOT / "skills" / "sn-ppt-web"
     ).is_dir()
     else Path("/mnt/afs/hejiatong/multimodal_design/static-ppt-skill-suite")
 )
-LONG_HORIZON_PRESENTER_SUITE_ROOT = Path(
+SN_PPT_WEB_SUITE_ROOT = Path(
     os.environ.get(
-        "PPTAGENT_LONG_HORIZON_PRESENTER_SUITE_ROOT",
-        _DEFAULT_LONG_HORIZON_PRESENTER_SUITE_ROOT,
+        "PPTAGENT_SN_PPT_WEB_SUITE_ROOT",
+        _DEFAULT_SN_PPT_WEB_SUITE_ROOT,
     )
 )
-LONG_HORIZON_PRESENTER_SKILL_ROOT = Path(
+SN_PPT_WEB_SKILL_ROOT = Path(
     os.environ.get(
-        "PPTAGENT_LONG_HORIZON_PRESENTER_SKILL_ROOT",
-        LONG_HORIZON_PRESENTER_SUITE_ROOT / "skills" / "long-horizon-presenter",
+        "PPTAGENT_SN_PPT_WEB_SKILL_ROOT",
+        SN_PPT_WEB_SUITE_ROOT / "skills" / "sn-ppt-web",
     )
 )
-LONG_HORIZON_PRESENTER_HARNESS_ROOT = Path(
+SN_PPT_WEB_HARNESS_ROOT = Path(
     os.environ.get(
-        "PPTAGENT_LONG_HORIZON_PRESENTER_HARNESS_ROOT",
-        LONG_HORIZON_PRESENTER_SUITE_ROOT / "harnesses" / "long-horizon-presenter",
+        "PPTAGENT_SN_PPT_WEB_HARNESS_ROOT",
+        SN_PPT_WEB_SUITE_ROOT / "harnesses" / "sn-ppt-web",
     )
 )
-LONG_HORIZON_PRESENTER_HARNESS_ENTRY = os.environ.get(
-    "PPTAGENT_LONG_HORIZON_PRESENTER_HARNESS_ENTRY", "distill_ppt.py"
+SN_PPT_WEB_HARNESS_ENTRY = os.environ.get(
+    "PPTAGENT_SN_PPT_WEB_HARNESS_ENTRY", "distill_ppt.py"
 )
 MURAL_PRESENTER_SKILL_ROOT = Path(
     os.environ.get(
         "PPTAGENT_MURAL_PRESENTER_SKILL_ROOT",
-        LONG_HORIZON_PRESENTER_SUITE_ROOT / "skills" / "mural-presenter",
+        SN_PPT_WEB_SUITE_ROOT / "skills" / "mural-presenter",
     )
 )
 MURAL_PRESENTER_HARNESS_ROOT = Path(
     os.environ.get(
         "PPTAGENT_MURAL_PRESENTER_HARNESS_ROOT",
-        LONG_HORIZON_PRESENTER_SUITE_ROOT / "harnesses" / "mural-presenter",
+        SN_PPT_WEB_SUITE_ROOT / "harnesses" / "mural-presenter",
     )
 )
 MURAL_PRESENTER_HARNESS_ENTRY = os.environ.get(
@@ -387,9 +387,9 @@ def _visual_craft_skill(
     }
 
 
-def _long_horizon_presenter_skill(
-    skill_root: Path = LONG_HORIZON_PRESENTER_SKILL_ROOT,
-    harness_root: Path = LONG_HORIZON_PRESENTER_HARNESS_ROOT,
+def _sn_ppt_web_skill(
+    skill_root: Path = SN_PPT_WEB_SKILL_ROOT,
+    harness_root: Path = SN_PPT_WEB_HARNESS_ROOT,
 ) -> dict:
     """Register the renamed static high-design Skill with its paired Harness."""
     required_files = (
@@ -418,7 +418,7 @@ def _long_horizon_presenter_skill(
         "subagents/review.md",
     )
     harness_required = (
-        LONG_HORIZON_PRESENTER_HARNESS_ENTRY,
+        SN_PPT_WEB_HARNESS_ENTRY,
         "core/__init__.py",
         "core/agent.py",
         "core/tools.py",
@@ -431,9 +431,9 @@ def _long_horizon_presenter_skill(
     missing_harness = [relative for relative in harness_required if not (harness_root / relative).is_file()]
     reasons = []
     if missing_skill:
-        reasons.append("long-horizon-presenter Skill 缺少：" + ", ".join(missing_skill))
+        reasons.append("sn-ppt-web Skill 缺少：" + ", ".join(missing_skill))
     if missing_harness:
-        reasons.append("long-horizon-presenter Harness 缺少：" + ", ".join(missing_harness))
+        reasons.append("sn-ppt-web Harness 缺少：" + ", ".join(missing_harness))
     digest = hashlib.sha256()
     if not missing_skill:
         _hash_runtime_tree(digest, skill_root)
@@ -444,26 +444,26 @@ def _long_horizon_presenter_skill(
     ready = not missing_skill and not missing_harness
     return {
         "label": os.environ.get(
-            "PPTAGENT_LONG_HORIZON_PRESENTER_DISPLAY_NAME",
+            "PPTAGENT_SN_PPT_WEB_DISPLAY_NAME",
             "sn-ppt-web",
         ),
         "path": str(skill_root),
         "skills_root": str(skill_root.parent),
-        "name": "long-horizon-presenter",
+        "name": "sn-ppt-web",
         "language": "zh",
         "deck_language": "auto",
         "force_skill_language": "",
-        "mode": "long-horizon-presenter",
+        "mode": "sn-ppt-web",
         "status": "current" if ready else "unavailable",
         "ready": ready,
         "unavailable_reason": "；".join(reasons),
         "required_files": list(required_files),
         "source_revision": digest.hexdigest()[:12] if ready else "",
-        "pipeline": "long-horizon-presenter-harness",
+        "pipeline": "sn-ppt-web-harness",
         "harness_path": str(harness_root),
-        "harness_entry": LONG_HORIZON_PRESENTER_HARNESS_ENTRY,
+        "harness_entry": SN_PPT_WEB_HARNESS_ENTRY,
         "harness_required_files": list(harness_required),
-        "pairing": "long-horizon-presenter-paired",
+        "pairing": "sn-ppt-web-paired",
         "caps": ["attachments", "revision", "static_html", "custom_fonts"],
     }
 
@@ -622,18 +622,13 @@ SKILLS = {
         inline_image=True,
     ),
     "visual-craft": _visual_craft_skill(),
-    "long-horizon-presenter": _long_horizon_presenter_skill(),
+    "sn-ppt-web": _sn_ppt_web_skill(),
     "mural-presenter": _mural_presenter_skill(),
 }
-# Product surface: three static generation modes, each backed by its own paired
-# Harness.  Dynamic generation is selected in its own UI mode and is paired with
-# sense-present-dazzle-harness rather than being mixed into this static catalog.
-_DEFAULT_PUBLIC_SKILL_KEYS = (
-    "sense-present-standard",
-    "visual-craft",
-    "long-horizon-presenter",
-    "mural-presenter",
-)
+# The public V1 release exposes one stable workflow. Other catalog entries stay
+# registered only so existing development data can still be inspected when a
+# maintainer explicitly opts into them through PPTAGENT_PUBLIC_SKILL_KEYS.
+_DEFAULT_PUBLIC_SKILL_KEYS = ("sn-ppt-web",)
 _configured_public_skill_keys = tuple(
     key.strip()
     for key in os.environ.get("PPTAGENT_PUBLIC_SKILL_KEYS", "").split(",")
@@ -644,7 +639,7 @@ _configured_default_skill = os.environ.get("PPTAGENT_DEFAULT_SKILL", "").strip()
 DEFAULT_SKILL = (
     _configured_default_skill
     if _configured_default_skill in PUBLIC_SKILL_KEYS
-    else ("mural-presenter" if "mural-presenter" in PUBLIC_SKILL_KEYS else PUBLIC_SKILL_KEYS[0])
+    else PUBLIC_SKILL_KEYS[0]
 )
 _SKILL_CATALOG_LOCK = threading.Lock()
 try:
@@ -690,18 +685,18 @@ def refresh_external_skills(*, force: bool = False) -> dict:
             inline_image=True,
         )
         visual_craft = _visual_craft_skill()
-        long_horizon_presenter = _long_horizon_presenter_skill()
+        sn_ppt_web = _sn_ppt_web_skill()
         mural_presenter = _mural_presenter_skill()
         SKILLS["long-horizon"] = refreshed
         SKILLS["long-horizon-grouped"] = grouped
         SKILLS["long-horizon-grouped-inline-image"] = grouped_inline_image
         SKILLS["visual-craft"] = visual_craft
-        SKILLS["long-horizon-presenter"] = long_horizon_presenter
+        SKILLS["sn-ppt-web"] = sn_ppt_web
         SKILLS["mural-presenter"] = mural_presenter
         if "PIPELINES" in globals():
             PIPELINES["visual-craft-harness"] = _visual_craft_pipeline(visual_craft)
-            PIPELINES["long-horizon-presenter-harness"] = _long_horizon_presenter_pipeline(
-                long_horizon_presenter
+            PIPELINES["sn-ppt-web-harness"] = _sn_ppt_web_pipeline(
+                sn_ppt_web
             )
             PIPELINES["mural-presenter-harness"] = _mural_presenter_pipeline(
                 mural_presenter
@@ -726,16 +721,16 @@ def _visual_craft_pipeline(skill: dict | None = None) -> dict:
     }
 
 
-def _long_horizon_presenter_pipeline(skill: dict | None = None) -> dict:
-    skill = skill or SKILLS.get("long-horizon-presenter") or _long_horizon_presenter_skill()
+def _sn_ppt_web_pipeline(skill: dict | None = None) -> dict:
+    skill = skill or SKILLS.get("sn-ppt-web") or _sn_ppt_web_skill()
     return {
         "label": f"{skill['label']} harness",
-        "path": str(LONG_HORIZON_PRESENTER_HARNESS_ROOT),
-        "entry": LONG_HORIZON_PRESENTER_HARNESS_ENTRY,
+        "path": str(SN_PPT_WEB_HARNESS_ROOT),
+        "entry": SN_PPT_WEB_HARNESS_ENTRY,
         "supports": ["anthropic", "openai"],
-        "skill_mode": "long-horizon-presenter",
+        "skill_mode": "sn-ppt-web",
         "caps": ["attachments", "revision", "static_html", "custom_fonts"],
-        "pairing": "long-horizon-presenter-paired",
+        "pairing": "sn-ppt-web-paired",
         "ready": bool(skill.get("ready")),
         "unavailable_reason": skill.get("unavailable_reason", ""),
     }
@@ -790,10 +785,10 @@ PIPELINES = {
         "ready": True,
     },
     "visual-craft-harness": _visual_craft_pipeline(),
-    "long-horizon-presenter-harness": _long_horizon_presenter_pipeline(),
+    "sn-ppt-web-harness": _sn_ppt_web_pipeline(),
     "mural-presenter-harness": _mural_presenter_pipeline(),
 }
-DEFAULT_PIPELINE = SKILLS[DEFAULT_SKILL].get("pipeline", "mural-presenter-harness")
+DEFAULT_PIPELINE = SKILLS[DEFAULT_SKILL].get("pipeline", "sn-ppt-web-harness")
 
 # 历史 deck 仍可重试，但旧 key 不再注册、也不会出现在前端选项中。
 LEGACY_SKILL_ALIASES = {
@@ -1245,7 +1240,7 @@ def build_job(sample_id: str, seed: dict, run_dir, dry: bool = False, model_key:
         "long-horizon",
         "long-horizon-grouped",
         "visual-craft",
-        "long-horizon-presenter",
+        "sn-ppt-web",
         "mural-presenter",
     }:
         # A generation job must capture the latest Skill even when the homepage

@@ -6,7 +6,7 @@ Use `response_language` for visible progress and handoff text, and `deliverable_
 
 Own one coherent, non-overlapping image group. Obtain real images or generate bitmaps from the supplied briefs, verify usability, save them under `assets/`, and return real paths.
 
-Return `ready` only when every planned `asset_id` exists in `assets/catalog.json`, points to an existing local file, and has review status `ready`. Otherwise return `blocked` with a reason and usable fallback for each gap.
+Complete the group by giving every `asset_id` either a verified local file or a concrete fallback that the Orchestrator can write into the affected page plan. One unavailable image does not by itself make the deck impossible.
 
 ## 2. Inputs and boundaries
 
@@ -17,6 +17,7 @@ Do not modify `plan/`, `base.css`, `slides/`, or another Image group's files. Co
 ## 3. Medium routing
 
 - Real people, products, brands, places, buildings, works, and events: retrieve verifiable real imagery.
+- For named films, animation, games, artworks, and identifiable characters used for recognition, character introduction, shot analysis, or evidence, retrieve official stills, posters, character sheets, production material, or credible editorial imagery first.
 - Never replace an identity-bearing real subject with an anonymous generated lookalike.
 - Illustration, atmosphere, metaphor, generic scenes, and story images: generate bitmaps.
 - Hero and background images must reserve a title-safe area and follow the deck's visual recipe.
@@ -75,12 +76,11 @@ Inspect the contact sheet once for subject correctness, group consistency, artif
 - Preserve semantic colors in scientific, product, identity, artwork, thermal, spectral, or microscopy images. Harmonize with crop, framing, mild temperature, or local overlays rather than blanket grayscale.
 - CSS masks, blend modes, white backgrounds, or matching background colors are not transparency.
 - Do not use `mv` or `cp` to rename `fetch_image` or `image_generate` outputs; preserve catalog provenance.
-- A safety-filter rejection counts as one failure. Retry a rewritten prompt at most once, then switch route or return a fallback.
+- A safety-filter rejection, authentication/permission denial, exhausted quota, or another explicitly non-retryable 4xx ends that generation route. Retry one materially safer prompt at most, then switch to real retrieval or return a fallback; do not probe the filter with synonyms. If the tool asks for local-candidate inspection or a catalog decision, do that next instead of calling generation again, and do not describe the local workflow gate as provider quota. With zero candidates and an explicit upstream rejection, switch route immediately rather than waiting for recovery.
 
-## 6. Return contract
+## 6. Handoff
 
 ```text
-status: ready | blocked
 assets:
   - asset_id: <id>
     path: assets/<actual-file>
@@ -92,3 +92,5 @@ assets:
 missing: none | <asset_id + reason + fallback>
 transparent_assets: assets/<name>-cutout.png | not-required
 ```
+
+Summarize completed assets and real gaps naturally; do not use a fixed status enum to control the parent workflow. Candidates, superseded files, and unresolved review items are not prepared assets. Every missing item needs one plan-ready replacement medium so the Orchestrator can update affected pages and continue without redelegating the same Image task. Declare the whole task unable to continue only when the missing content makes the user's core goal impossible. List only alpha- and Vision-verified files under `transparent_assets`.

@@ -25,17 +25,17 @@ Shell 变量插值，因此不要写 `${HOME}`，请填写完整路径。
 | `STUDIO_MAX_PER_MODEL` | `0` | `0` 表示不按模型限制并发 |
 | `STUDENT_TEMPERATURE` | `0.3` | 静态生成温度 |
 
-## sn-ppt-web（内部实现：long-horizon-presenter Harness + 双语冻结 Skill）
+## sn-ppt-web Harness + 双语冻结 Skill
 
 前端始终只展示一个 `sn-ppt-web`。Harness 根据本轮 query 的主要语言自动选择：中文使用 `sn-ppt-web-zh`，英文使用 `sn-ppt-web-en`。任务快照会记录实际使用的 Skill 名称、语言和目录哈希。
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `PPTAGENT_PUBLIC_SKILL_KEYS` | `long-horizon-presenter` | 公共 Skill 内部键，前端显示为 sn-ppt-web |
-| `PPTAGENT_DEFAULT_SKILL` | `long-horizon-presenter` | 默认 Skill 内部键，前端显示为 sn-ppt-web |
-| `PPTAGENT_LONG_HORIZON_PRESENTER_SUITE_ROOT` | 自动发现 | 同时包含 `skills/` 与 `harnesses/` 的目录 |
-| `PPTAGENT_LONG_HORIZON_PRESENTER_SKILL_ROOT` | Suite 下默认位置 | 单独覆盖 Skill |
-| `PPTAGENT_LONG_HORIZON_PRESENTER_HARNESS_ROOT` | Suite 下默认位置 | 单独覆盖 Harness |
+| `PPTAGENT_PUBLIC_SKILL_KEYS` | `sn-ppt-web` | 公共 Skill 内部键，前端显示为 sn-ppt-web |
+| `PPTAGENT_DEFAULT_SKILL` | `sn-ppt-web` | 默认 Skill 内部键，前端显示为 sn-ppt-web |
+| `PPTAGENT_SN_PPT_WEB_SUITE_ROOT` | 自动发现 | 同时包含 `skills/` 与 `harnesses/` 的目录 |
+| `PPTAGENT_SN_PPT_WEB_SKILL_ROOT` | Suite 下默认位置 | 单独覆盖 Skill |
+| `PPTAGENT_SN_PPT_WEB_HARNESS_ROOT` | Suite 下默认位置 | 单独覆盖 Harness |
 
 正常安装不要改上述路径。若你维护了新版 Skill/Harness，必须保证两者来自相互匹配的同一套
 Suite，并同时替换。
@@ -138,7 +138,7 @@ SENSENOVA_KIMI_K3_API_KEY=replace-me
 | `PPT_SKILL_BROWSER_EXE` | 显式指定 Chromium / chrome-headless-shell |
 | `STUDIO_DATA_DIR` | 用户授权上传的字体配置与生成资产也写入这里 |
 
-发布包不会附带商业字体。sn-ppt-web（`long-horizon-presenter`）会按用户配置和系统字体进行匹配，并在交付阶段
+发布包不会附带商业字体。`sn-ppt-web` 会按用户配置和系统字体进行匹配，并在交付阶段
 按实际使用情况打包允许嵌入的字体资源。
 
 ## 数据目录建议

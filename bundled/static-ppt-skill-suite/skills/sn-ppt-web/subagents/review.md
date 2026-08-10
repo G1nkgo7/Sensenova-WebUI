@@ -36,14 +36,14 @@
 5. 屏显文案或字体发生变化时运行：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/deck.py prepare . --expected <总页数>
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py prepare . --expected <总页数>
    ```
 
 6. 一次批量重渲目标页，再生成 focus 联系表并看新像素：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/render.py --batch . --pages NN,NN
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/deck.py contact . --focus NN,NN
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/render.py --batch . --pages NN,NN
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py contact . --focus NN,NN
    ```
 
 7. 运行 `deck.py build . --expected <总页数>` 完成讲稿、字体、播放器与联系表收口。
@@ -66,7 +66,7 @@
 2. 生成全册联系表：
 
    ```bash
-   python ${SKILL_DIR:-skills/long-horizon-presenter}/scripts/deck.py contact . --expected <总页数>
+   python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py contact . --expected <总页数>
    ```
 
 3. 先看 overview，再按 `review-contact.json` 的顺序分批看完全部分组联系表；拿不准才打开单页 PNG。每张未变化的联系表或单页 PNG 在诊断阶段只看一次；改变问题措辞不会产生新证据。每次 Vision 都先要求主动指出任何计划外的视觉异常（突兀白块/色带、接缝、错误页脚家具、裁切、漂浮元素、空洞或拥挤），再核对本页计划的特定目标，不能把问题写成只会得到“符合预期”的封闭式确认。本页或联系表的首次 Vision 返回前，不得同回合读取 `render-issues.json` 或把 bbox 候选写入提问；先得到中性像素结论，再用 DOM/bbox 诊断补充定位。不要一轮同时请求超过当前 Vision 能稳定处理的图像数；看完一批就把页码覆盖和发现追加到唯一 `_trace/review-issues.md`，再看下一批，直到 `diagnosed_pages=all`。第一轮全册覆盖结束后必须立即冻结账本并进入集中修复或返回 `blocked`，不得重新播放同一批联系表来拖延判断。
