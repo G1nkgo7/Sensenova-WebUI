@@ -296,7 +296,7 @@ def main() -> int:
             "PPTAGENT_LONG_HORIZON_PRESENTER_SUITE_ROOT": str(BUNDLED_PRESENTER_SUITE),
             "PPTAGENT_PUBLIC_SKILL_KEYS": "long-horizon-presenter",
             "PPTAGENT_DEFAULT_SKILL": "long-horizon-presenter",
-            "PPTAGENT_LONG_HORIZON_PRESENTER_DISPLAY_NAME": "mural-presenter",
+            "PPTAGENT_LONG_HORIZON_PRESENTER_DISPLAY_NAME": "sn-ppt-web",
         })
     for key, value in defaults.items():
         os.environ.setdefault(key, value)

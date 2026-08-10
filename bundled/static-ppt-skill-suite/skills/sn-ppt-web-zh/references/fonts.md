@@ -1,0 +1,73 @@
+# 字体系统：可核验开源字体与用户授权字体
+
+本文件只在默认字体角色不足或场合对字体敏感时读取。字体选择先服从受众、场合和材料气质，再考虑题材。
+
+## 1. 许可边界
+
+- 默认字体必须同时满足：官方项目可追溯、明确标注 `OFL-1.1`、已登记在 `font_bundle.py` 白名单。
+- 若工作区存在 `materials/font-config.json`，其中字体是用户主动上传且已确认具备演示与嵌入权利的项目字体；优先服从其角色映射。不得把字体文件当普通 Material，也不得自行推断其许可。
+- 页面只使用 `--font-*` 角色 token，不写外部 `@import`、CDN 字体 URL 或未登记的本机字体名。
+- 本机即使安装了字体，只要不在白名单且不是本项目授权上传字体，交付时也必须回退到已批准的 OFL 字体。只写一个字体名称、未提供字体文件，不算自定义字体。
+- 字体子集随 deck 一起分发时，必须生成 `assets/fonts/LICENSES.txt`；内置字体附 `OFL-1.1.txt`，用户字体附 `USER-FONTS.txt` 与来源哈希。
+- 字体子集属于修改产物，构建时必须把内部 family/PostScript 名称改成 `Deck-*`，避免沿用 OFL Reserved Font Name。
+- 不修改字体保留名称，不单独售卖字体文件。此处是工程护栏，不代替具体项目的法律审核。
+
+来源或再分发授权不够清晰的旧本机字体已经全部移出模板；不要把未登记字体重新加回 fallback。构建器会把用户字体裁剪、改名为 `Deck-*` 并保留 Noto 中文兜底，最终 HTML 不依赖观看者本机安装字体。
+
+## 2. 角色 token 与开源替代
+
+| token | 默认字体 | 角色与来源 |
+| --- | --- | --- |
+| `--font-sans` | Noto Sans SC | 正文、表格、图表标注；Google Fonts / OFL |
+| `--font-serif` | Noto Serif SC，Spectral | 中文编辑标题与拉丁衬线补充；Google Fonts / OFL |
+| `--font-hei-heavy` | Noto Sans SC 900 | 超粗 hero；需要窄斜展示效果时可显式选 Smiley Sans（官方项目 / OFL） |
+| `--font-brush` | Ma Shan Zheng | 书法主标题、金句；Google Fonts / OFL |
+| `--font-kai` | Xiaolai，LXGW WenKai | 清晰硬笔感章节、引言和人文标题；官方项目 / OFL |
+| `--font-write` | Xiaolai | 工整批注、引语和短标题；官方项目 / OFL |
+| `--font-write-cursive` | Liu Jian Mao Cao，Long Cang | 草书/行书大字；Google Fonts / OFL |
+| `--font-playful` | ZCOOL KuaiLe | 活泼、漫画、儿童标题；Google Fonts / OFL |
+| `--font-round` | ZCOOL QingKe HuangYou，ZCOOL KuaiLe | 圆润/趣味展示；Google Fonts / OFL |
+| `--font-jotter` | Xiaolai，Zhi Mang Xing，Long Cang | 校园、手账、便签式中文手写；默认使用更清楚的小赖字体；官方项目 / OFL |
+| `--font-display-serif` | Fraunces | 编辑、杂志拉丁展示衬线；Google Fonts / OFL |
+| `--font-grotesque` | Archivo | 现代拉丁无衬线展示与数字；Google Fonts / OFL |
+| `--font-geometric` | Sora，Montserrat | 几何科技、产品发布和现代品牌；Google Fonts / OFL |
+| `--font-ui-clean` | DM Sans，Manrope | 克制商业、UI 与服务设计；Google Fonts / OFL |
+| `--font-tech-display` | Space Grotesk | 科技编辑、创新与未来主题；Google Fonts / OFL |
+| `--font-condensed` | Oswald，Barlow Condensed | 体育、海报、纵向节奏和窄栏标题；Google Fonts / OFL |
+| `--font-condensed-xl` | League Gothic，Bebas Neue | 极窄英文/数字主声部，不承担中文正文；Google Fonts / OFL |
+| `--font-poster` | Bebas Neue | 编辑海报与强节奏拉丁标题；Google Fonts / OFL |
+| `--font-display-wide` | Unbounded，Syne | 前沿、潮流、实验性展示；Google Fonts / OFL |
+| `--font-display-pop` | Bungee | 活泼消费与节庆标题；Google Fonts / OFL |
+| `--font-editorial-serif` | Playfair Display | 时尚、杂志和奢华编辑拉丁展示；Google Fonts / OFL |
+| `--font-classic-serif` | Cormorant Garamond | 文艺、历史与精致拉丁展示；Google Fonts / OFL |
+| `--font-cn-display-serif` | ZCOOL XiaoWei | 中文文化、人文与复古展示；Google Fonts / OFL |
+| `--font-hand-en` | Patrick Hand，Caveat | 英文手写批注；Google Fonts / OFL |
+| `--font-hand-en-neat` | Architects Daughter | 工整英文手写；Google Fonts / OFL |
+| `--font-hand-en-casual` | Indie Flower | 随性英文手写；Google Fonts / OFL |
+| `--font-hand-en-script` | Dancing Script，Sacramento | 英文连笔、签名和短引语；Google Fonts / OFL |
+| `--font-hand-en-marker` | Kalam，Shadows Into Light | 英文马克笔、板书和教学批注；Google Fonts / OFL |
+| `--font-mono` | IBM Plex Mono | 代码、坐标、ID、技术眉签；IBM/Google Fonts / OFL |
+| `--font-number` | 由 Style Lock 映射 | Hero 数字、KPI、章节序号的数字主声部 |
+
+## 3. 使用规则
+
+- 正文、表格和图表标注固定用 `--font-sans`；代码与技术编号才用 `--font-mono`。
+- `--font-number` 按语义选择：报告用 sans/grotesque，编辑叙事用 serif/display-serif，海报用 heavy/playful，工程读数才用 mono。
+- 含有信息的中文标题、章节、引语和批注优先使用 Xiaolai；霞鹜文楷仅作更正式的后备。草书只用于 ≥48px 且足够短的封面、hero 或金句。
+- 连笔签名字体只承担短语和名字；马克笔/板书体适合教学提示和海报批注，均不承担长正文。
+- 表达型 deck 使用 3–4 个角色即可；严谨型 deck 收到 2–3 个角色。字体数量不是质量目标，每款都必须有明确职责。
+- 中文必须保留 Noto Sans/Serif SC 兜底，避免拉丁展示体缺中文字形时出现豆腐块。
+
+## 4. 常用搭配
+
+- 学术/报告：Noto Serif SC 标题 + Noto Sans SC 正文 + Xiaolai 短批注。
+- 技术/数据：Noto Sans SC 900 大字 + Noto Sans SC 正文 + Archivo 数字；IBM Plex Mono 只做技术标识。
+- 电影/漫画/儿童：ZCOOL KuaiLe 标题 + Noto Sans SC 正文 + Patrick Hand 批注。
+- 文旅/传统：Ma Shan Zheng 只做短大标题 + Xiaolai 章节/引言 + Noto Sans SC 正文；信息型长标题直接用 Xiaolai，草书仅点一次。
+- 编辑/杂志：Fraunces 拉丁展示 + Noto Serif SC 中文标题 + Noto Sans SC 正文 + Archivo accent。
+- 科技/产品：Space Grotesk 或 Sora 展示 + Noto Sans SC 中文 + DM Sans 数据与英文标签。
+- 体育/海报：Oswald 或 Barlow Condensed 主标题 + Noto Sans SC 中文正文；Bebas Neue / League Gothic 只做英文和数字。
+- 时尚/奢华：Playfair Display 拉丁展示 + ZCOOL XiaoWei 或 Noto Serif SC 中文 + Manrope 正文。
+- 潮流/实验：Unbounded 或 Syne 作为单一强展示声部 + Noto Sans SC 正文，避免多个怪体互抢。
+
+构建前运行 `deck.py prepare`。它从白名单或 `materials/font-config.json` 选择实际字体并前置字符子集；最终 `deck.py build` 会重新校验字体文件、授权/许可证元数据和渲染新鲜度。

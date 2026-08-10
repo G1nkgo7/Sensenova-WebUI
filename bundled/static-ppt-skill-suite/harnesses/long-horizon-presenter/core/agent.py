@@ -262,9 +262,18 @@ class Agent:
 
         # —— tools.py 依赖的上下文字段 ——
         self.serper = os.environ.get("SERPER_API_KEY")
-        self.img_base = self.cfg.get("openai_base_url",
-                                     os.environ.get("OPENAI_BASE_URL", "https://tokenhub.sensetime.com/v1")).rstrip("/")
-        self.img_key = os.environ.get("OPENAI_API_KEY", "")
+        self.image_provider = str(
+            self.cfg.get("image_provider")
+            or os.environ.get("IMAGE_PROVIDER")
+            or "openai_images"
+        ).strip().lower()
+        self.img_base = str(
+            self.cfg.get("image_base_url")
+            or os.environ.get("IMAGE_BASE_URL")
+            or self.cfg.get("openai_base_url")
+            or os.environ.get("OPENAI_BASE_URL", "https://tokenhub.sensetime.com/v1")
+        ).rstrip("/")
+        self.img_key = os.environ.get("IMAGE_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
         self.image_model = self.cfg.get("image_model", os.environ.get("IMAGE_MODEL", "gpt-image-2-pro-all"))
         self.img_n = 0
 
@@ -366,7 +375,8 @@ class Agent:
         return {
             "role": self.role, "sample_id": self.sid, "label": self.label,
             "task": self.initial_user, "model": self.model, "anthropic_base_url": self.a_base,
-            "image_model": self.image_model, "max_tokens": self.max_tokens, "max_turns": self.max_turns,
+            "image_provider": self.image_provider, "image_model": self.image_model,
+            "max_tokens": self.max_tokens, "max_turns": self.max_turns,
             "serper": bool(self.serper), "pid": os.getpid(),
             "thinking": (
                 {"type": self.thinking_transport, "enabled": self.effective_thinking}
@@ -1210,11 +1220,14 @@ def _task_kind(label, goal):
     return "other"
 
 
-def _role_card_context(skills_root, kind, prompt_language="zh"):
+def _role_card_context(skills_root, kind, prompt_language="zh", skill_name=""):
     """Point a child at exactly one role card; the child reads it autonomously."""
     if kind not in {"research", "material", "image", "slide", "review"}:
         return ""
-    path = f"skills/long-horizon-presenter/subagents/{kind}.md"
+    selected_skill = str(skill_name or "").strip() or (
+        "sn-ppt-web-en" if str(prompt_language or "").lower() == "en" else "sn-ppt-web-zh"
+    )
+    path = f"skills/{selected_skill}/subagents/{kind}.md"
     if str(prompt_language or "").lower() == "en":
         return (
             f"Your only role-card path is {path}. Before taking any task action, "
@@ -1445,7 +1458,12 @@ def _build_child(parent, task):
         ident = f"你的身份是 {name};完成后在总结首句声明你的身份与产出。\n\n"
         context_label = "背景"
     kind = _task_kind(name, task.get("goal"))
-    role_card = _role_card_context(parent.skills_root, kind, prompt_language)
+    role_card = _role_card_context(
+        parent.skills_root,
+        kind,
+        prompt_language,
+        parent.cfg.get("_selected_skill_name"),
+    )
     initial = ident + _child_language_contract(prompt_language) + role_card + task["goal"] + (
         f"\n\n{context_label}:\n{context}" if context else ""
     )

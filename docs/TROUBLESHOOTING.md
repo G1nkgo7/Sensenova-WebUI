@@ -33,7 +33,7 @@ Debian/Ubuntu 缺少系统库时，Docker 构建会使用 `playwright install --
 
 ## Windows 上生成失败
 
-mural-presenter（内部实现为 `long-horizon-presenter`）依赖 POSIX shell 和 Unix 文件锁。请在 Docker Desktop 或 WSL2 Ubuntu 中
+sn-ppt-web（内部使用 `long-horizon-presenter` Harness，并路由到 `sn-ppt-web-zh/en`）依赖 POSIX shell 和 Unix 文件锁。请在 Docker Desktop 或 WSL2 Ubuntu 中
 运行，不要用裸 Windows Python 执行生成任务。
 
 ## Skill 显示不可用

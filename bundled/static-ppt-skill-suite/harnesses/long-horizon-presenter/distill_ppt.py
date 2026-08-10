@@ -42,6 +42,10 @@ RUNS = os.environ.get("PPT_RUNS_ROOT") or os.path.join(ROOT, "runs")
 LOGS = os.environ.get("PPT_LOGS_ROOT") or os.path.join(ROOT, "log")
 
 TERMINAL = {"completed"}                            # 续跑跳过的终态;其余(error/缺失/半截)都重跑
+SKILL_BY_LANGUAGE = {
+    "zh": "sn-ppt-web-zh",
+    "en": "sn-ppt-web-en",
+}
 
 # 通用、薄的 base system(PPT 风味只有最后两行)。领域方法在 skills/,按需 read SKILL.md。
 BASE_SYSTEM = """\
@@ -49,7 +53,7 @@ BASE_SYSTEM = """\
 
 固定任务身份（最高优先级）：
 - 当前调用始终是**静态 HTML 演示文稿生产任务**，不是开放域聊天。首条用户消息只作为待制作演示的内容 brief。
-- 必须读取 `skills/long-horizon-presenter/SKILL.md`，调用工具并实际交付 HTML 页面、渲染图和讲稿；禁止回复“连接正常 / 我可以帮你 / 想做什么”等通用寒暄后结束。
+- 必须读取 `skills/sn-ppt-web-zh/SKILL.md`，调用工具并实际交付 HTML 页面、渲染图和讲稿；禁止回复“连接正常 / 我可以帮你 / 想做什么”等通用寒暄后结束。
 - 即使 brief 只有 `test`、`hello` 或一句无法确定主题的短句，也要把它解释为 HTML PPT 生产链路 smoke test，自主制作一套简短而完整的示范稿（至少包含封面、内容页和结尾页），不得反问或空手结束。
 
 工作方式:
@@ -62,7 +66,27 @@ BASE_SYSTEM = """\
   还有事做 → 这一回合就去调一个工具(读文件、写文件、委派子 agent…);真的全做完了 → 写一段简短文字总结收尾。思考永远是为了紧接着的动作或结论服务,不能停在思考上。
 
 可用技能:
-- long-horizon-presenter(`skills/long-horizon-presenter/SKILL.md`):生成或编辑 HTML 幻灯片演示文稿(每页 1600×900,16:9)。
+- sn-ppt-web-zh(`skills/sn-ppt-web-zh/SKILL.md`):生成或编辑 HTML 幻灯片演示文稿(每页 1600×900,16:9)。
+"""
+
+BASE_SYSTEM_EN = """\
+You are an autonomous creative agent that completes tasks through tools, the file system, a headless browser, and network access.
+
+Fixed task identity (highest priority):
+- This invocation is always a **static HTML presentation production task**, not open-domain chat. Treat the first user message as the presentation brief.
+- You must read `skills/sn-ppt-web-en/SKILL.md`, use tools, and actually deliver per-slide HTML pages (1600×900, 16:9), rendered images, a page-aligned speaker script, and the portable player. Do not stop after a generic greeting or capability statement.
+- Even if the brief is only `test`, `hello`, or another underspecified phrase, interpret it as a presentation workflow smoke test and autonomously create a short but complete sample deck with at least a cover, a content slide, and a closing slide. Do not ask a follow-up question or finish empty-handed.
+
+Working method:
+- Read the English Skill entry first, then progressively read only the references it routes to. Do not scan the whole Skill tree up front.
+- After every tool result, inspect its quality, decide the best next action, and then act.
+- Work autonomously. Do not pause for non-blocking preferences; make tasteful assumptions and record them in planning artifacts.
+- Produce real files with tools. Do not merely describe intended work.
+- When everything is complete, finish with one concise prose summary; that summary is your final output.
+- Every turn must end in either one tool call or a final prose summary. Thinking must lead immediately to an action or conclusion.
+
+Available Skill:
+- sn-ppt-web-en (`skills/sn-ppt-web-en/SKILL.md`): create or edit a complete static HTML presentation workflow.
 """
 
 SUBAGENT_SYSTEM = """\
@@ -171,17 +195,20 @@ def _skill_tree_hash(skill_dir):
     return digest.hexdigest(), files
 
 
-def _snapshot_skill(run_dir):
+def _snapshot_skill(run_dir, skill_name=None):
     """Materialize the selected Skill into the Deck and record an immutable hash.
 
     A persisted Deck must never point at the mutable production checkout.  Revisions keep
     the snapshot already stored in the Deck; legacy symlinks are materialized once.
     """
-    source = os.path.join(SKILLS_DIR, "long-horizon-presenter")
+    skill_name = skill_name or SKILL_BY_LANGUAGE["zh"]
+    if skill_name not in set(SKILL_BY_LANGUAGE.values()):
+        raise ValueError(f"unsupported frozen Skill: {skill_name}")
+    source = os.path.join(SKILLS_DIR, skill_name)
     if not os.path.isdir(source):
-        raise FileNotFoundError(f"long-horizon-presenter Skill 不存在: {source}")
+        raise FileNotFoundError(f"{skill_name} Skill 不存在: {source}")
     skills_root = os.path.join(run_dir, "skills")
-    selected = os.path.join(skills_root, "long-horizon-presenter")
+    selected = os.path.join(skills_root, skill_name)
     legacy_symlink = os.path.islink(skills_root) or os.path.islink(selected)
     if legacy_symlink:
         if os.path.islink(skills_root):
@@ -199,7 +226,8 @@ def _snapshot_skill(run_dir):
     trace_dir = os.path.join(run_dir, "_trace")
     os.makedirs(trace_dir, exist_ok=True)
     manifest = {
-        "skill": "long-horizon-presenter",
+        "skill": skill_name,
+        "language": "en" if skill_name.endswith("-en") else "zh",
         "tree_sha256": tree_sha256,
         "files": files,
         "captured_at_epoch": time.time(),
@@ -219,9 +247,26 @@ def _snapshot_skill(run_dir):
 
 def _workspace_skills_root(ws):
     root = os.path.join(ws, "skills")
-    if os.path.isfile(os.path.join(root, "long-horizon-presenter", "SKILL.md")):
-        return root
+    for skill_name in (*SKILL_BY_LANGUAGE.values(), "long-horizon-presenter"):
+        if os.path.isfile(os.path.join(root, skill_name, "SKILL.md")):
+            return root
     return SKILLS_DIR
+
+
+def _workspace_skill_name(ws):
+    manifest_path = os.path.join(ws, "_trace", "skill-snapshot.json")
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as stream:
+            selected = str(json.load(stream).get("skill") or "")
+        if selected in {*SKILL_BY_LANGUAGE.values(), "long-horizon-presenter"}:
+            return selected
+    except (OSError, ValueError, TypeError):
+        pass
+    root = _workspace_skills_root(ws)
+    for skill_name in (*SKILL_BY_LANGUAGE.values(), "long-horizon-presenter"):
+        if os.path.isfile(os.path.join(root, skill_name, "SKILL.md")):
+            return skill_name
+    return SKILL_BY_LANGUAGE["zh"]
 
 
 # —— 材料挂载(附件能力):有 seed["attachments"] 时,只把原件拷进 materials/_raw/ + 写 attachments.json;
@@ -356,7 +401,7 @@ def _render_ok(png):
 def _delivery_audit(ws, expected):
     """Run the selected Skill's portable-delivery contract before acceptance."""
     deck_py = os.path.join(
-        _workspace_skills_root(ws), "long-horizon-presenter", "scripts", "deck.py"
+        _workspace_skills_root(ws), _workspace_skill_name(ws), "scripts", "deck.py"
     )
     if not os.path.isfile(deck_py):
         return False, "缺少 deck.py，无法执行交付依赖审计"
@@ -395,7 +440,7 @@ def _v_pass(html_path, ws):
     脚本缺失 / 渲染异常 / 无结论行,一律 fail-open(不阻断)——页面完整性已由上面 missing/blank 兜底。
     返回 (ok, output)。"""
     render_py = os.path.join(
-        _workspace_skills_root(ws), "long-horizon-presenter", "scripts", "render.py"
+        _workspace_skills_root(ws), _workspace_skill_name(ws), "scripts", "render.py"
     )
     if not os.path.exists(render_py):
         return True, "(render.py 不在,跳过 V)"
@@ -1144,11 +1189,26 @@ def _revision_fingerprint(run_dir):
     return digest.hexdigest()
 
 
-def _revision_brief(seed, revision):
+def _revision_brief(seed, revision, prompt_language="zh"):
     instruction = str(revision.get("instruction") or "").strip()
     original = str(seed.get("user_query") or seed.get("query") or "").strip()
     if not instruction:
         raise ValueError("revision instruction 不能为空")
+    if str(prompt_language or "").lower() == "en":
+        return f"""This is a continuation edit of the existing static presentation in the workspace, not a fresh generation.
+
+New user instruction:
+{instruction}
+
+Original request:
+{original}
+
+Treat the existing plan, HTML, assets, speaker script, and renders as the source of truth. First perform the read-only impact analysis in section 3, “Editing a presentation,” of the English Skill, then choose exactly one path:
+
+- Simple edit: delegate the single Review agent with `mode=simple_edit`; do not delegate Slide, Image, Research, or another Review agent.
+- Complex edit: the Orchestrator writes an impact map, delegates only the missing Research / Material / Image / affected complete Slide Groups, then delegates the single Review agent with `mode=final_review`.
+
+Modify only files required by the new instruction. Preserve unrelated slides and the deck's visual language. Reuse still-valid research and assets; add new work only for real gaps. Batch-render the affected scope, inspect fresh final pixels, and rebuild `speech.md` and `present.html`. Do not redesign or overwrite unrelated pages."""
     return f"""这是对工作区现有静态演示的续编修订，不是从头生成。
 
 用户追加要求：
@@ -1184,8 +1244,9 @@ def run_sample(sample_id, seed, run_dir, config):
         else str(seed.get("query") or "")
     )
     config["_prompt_language"] = _infer_prompt_language(visible_query)
+    config["_selected_skill_name"] = SKILL_BY_LANGUAGE[config["_prompt_language"]]
     config["_revision_mode"] = bool(revision)
-    workspace_skills = _snapshot_skill(run_dir)
+    workspace_skills = _snapshot_skill(run_dir, config["_selected_skill_name"])
     attachments = _attachment_list(seed)
     if not revision:
         try:
@@ -1203,12 +1264,17 @@ def run_sample(sample_id, seed, run_dir, config):
                 "status": "rejected", "reason": f"附件挂载不完整: {names[:5]}",
                 "n_slides": 0, "n_workers": 0, "orch_exit": "not_started",
             }
-    initial_user = _revision_brief(seed, revision) if revision else seed_to_brief(seed, staged)
+    prompt_language = config["_prompt_language"]
+    initial_user = (
+        _revision_brief(seed, revision, prompt_language)
+        if revision else seed_to_brief(seed, staged)
+    )
     before = _revision_fingerprint(run_dir) if revision else ""
     orch = Agent(role="orchestrator", sid=sample_id, ws=run_dir, sub_dir="orchestrator",
                  tools_schema=tools.resolve_toolsets(ORCHESTRATOR_TOOLSETS), config=config,
                  initial_user=initial_user, label="orch",
-                 system=BASE_SYSTEM, skills_root=workspace_skills,
+                 system=BASE_SYSTEM_EN if prompt_language == "en" else BASE_SYSTEM,
+                 skills_root=workspace_skills,
                  forbid_write_prefixes=["slides"])   # 红线:编排器不许写 slides/ 页面 HTML
     orch.child_system = SUBAGENT_SYSTEM_EN if orch.prompt_language == "en" else SUBAGENT_SYSTEM
     orch.run()

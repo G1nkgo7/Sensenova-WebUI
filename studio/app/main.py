@@ -295,6 +295,7 @@ class CustomModelInput(BaseModel):
 
 class ServiceConfigInput(BaseModel):
     image_enabled: bool = False
+    image_provider: str = service_config.DEFAULT_IMAGE_PROVIDER
     image_base_url: str = ""
     image_model: str = ""
     image_api_key: SecretStr | None = None
@@ -358,6 +359,7 @@ def save_service_config(body: ServiceConfigInput, user=Depends(require_user)):
         service_config.update(
             user["id"],
             image_enabled=body.image_enabled,
+            image_provider=body.image_provider,
             image_base_url=body.image_base_url,
             image_model=body.image_model,
             image_api_key=(body.image_api_key.get_secret_value()

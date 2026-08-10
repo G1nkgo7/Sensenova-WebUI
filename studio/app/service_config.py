@@ -14,13 +14,15 @@ from pathlib import Path
 from . import custom_models
 from .db import DATA_DIR
 
-CONFIG_VERSION = 3
+CONFIG_VERSION = 4
 CONFIG_DIR = DATA_DIR / "user_configs"
 DEFAULT_MAX_TOKENS = 40960
 DEFAULT_STATIC_MAX_TURNS = 4096
 DEFAULT_STATIC_SUBAGENT_MAX_TURNS = 200
 DEFAULT_DYNAMIC_MAX_TURNS = 4096
 DEFAULT_STREAMING_ENABLED = True
+IMAGE_PROVIDERS = {"openai_images", "sensenova_u1"}
+DEFAULT_IMAGE_PROVIDER = "openai_images"
 
 
 def _deployment_value(*names: str) -> str:
@@ -47,13 +49,18 @@ def system_runtime_env() -> dict[str, str]:
         "SENSENOVA_IMAGE_API_KEY", "SENSENOVA_OPENAI_API_KEY"
     )
     image_model = _deployment_value("SENSENOVA_IMAGE_MODEL")
+    image_provider = _deployment_value("SENSENOVA_IMAGE_PROVIDER") or DEFAULT_IMAGE_PROVIDER
+    if image_provider not in IMAGE_PROVIDERS:
+        image_provider = DEFAULT_IMAGE_PROVIDER
     if image_url:
+        env["IMAGE_BASE_URL"] = image_url.rstrip("/")
         env["OPENAI_BASE_URL"] = image_url.rstrip("/")
     if image_key:
         env["OPENAI_API_KEY"] = image_key
         env["IMAGE_API_KEY"] = image_key
     if image_model:
         env["IMAGE_MODEL"] = image_model
+    env["IMAGE_PROVIDER"] = image_provider
 
     search_url = _deployment_value("SENSENOVA_SEARCH_BASE_URL")
     search_key = _deployment_value("SENSENOVA_SEARCH_API_KEY")
@@ -73,6 +80,7 @@ def _blank() -> dict:
         "version": CONFIG_VERSION,
         "image_generation": {
             "enabled": False,
+            "provider": DEFAULT_IMAGE_PROVIDER,
             "base_url": "",
             "model": "",
             "api_key_enc": "",
@@ -163,6 +171,7 @@ def update(
     user_id: int,
     *,
     image_enabled: bool,
+    image_provider: str,
     image_base_url: str,
     image_model: str,
     image_api_key: str | None,
@@ -182,6 +191,9 @@ def update(
     search = data["web_search"]
     generation = data["generation"]
 
+    image_provider = str(image_provider or DEFAULT_IMAGE_PROVIDER).strip().lower()
+    if image_provider not in IMAGE_PROVIDERS:
+        raise ValueError("不支持的生图服务类型")
     image_url = _normalize_optional_url(image_base_url)
     search_url = _normalize_optional_url(search_base_url)
     image_model = str(image_model or "").strip()
@@ -217,7 +229,12 @@ def update(
             dynamic_max_turns, label="动态最大轮次", minimum=1, maximum=16384
         )
 
-    image.update({"enabled": bool(image_enabled), "base_url": image_url, "model": image_model})
+    image.update({
+        "enabled": bool(image_enabled),
+        "provider": image_provider,
+        "base_url": image_url,
+        "model": image_model,
+    })
     search.update({"enabled": bool(search_enabled), "base_url": search_url})
 
     if clear_image_api_key:
@@ -260,6 +277,7 @@ def public_payload(user_id: int) -> dict:
     return {
         "image_generation": {
             "enabled": bool(image.get("enabled")),
+            "provider": str(image.get("provider") or DEFAULT_IMAGE_PROVIDER),
             "base_url": str(image.get("base_url") or ""),
             "model": str(image.get("model") or ""),
             "has_api_key": bool(image.get("api_key_enc")),
@@ -307,6 +325,7 @@ def runtime_payload(user_id: int) -> dict:
     image = data["image_generation"]
     if image.get("enabled"):
         out["image_generation"] = {
+            "provider": str(image.get("provider") or DEFAULT_IMAGE_PROVIDER),
             "base_url": str(image.get("base_url") or ""),
             "model": str(image.get("model") or ""),
             "api_key": custom_models.decrypt_api_key(str(image.get("api_key_enc") or "")),
@@ -349,6 +368,8 @@ def runtime_env(user_id: int) -> dict[str, str]:
     image = payload.get("image_generation")
     if image:
         env.update({
+            "IMAGE_PROVIDER": image["provider"],
+            "IMAGE_BASE_URL": image["base_url"],
             "OPENAI_BASE_URL": image["base_url"],
             "OPENAI_API_KEY": image["api_key"],
             "IMAGE_API_KEY": image["api_key"],

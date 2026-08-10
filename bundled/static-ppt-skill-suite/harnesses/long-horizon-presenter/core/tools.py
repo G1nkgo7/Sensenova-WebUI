@@ -634,6 +634,114 @@ def web_extract(agent, urls, **_extra):
 
 
 _ASPECT_SIZE = {"landscape": "1536x1024", "portrait": "1024x1536", "square": "1024x1024"}
+_SENSENOVA_U1_SIZE = {
+    "landscape": "2752x1536",
+    "portrait": "1536x2752",
+    "square": "2048x2048",
+}
+
+
+def _image_api_request(agent, prompt, size, aspect_ratio=None):
+    """Call the selected image provider and return its decoded JSON payload."""
+    provider = str(getattr(agent, "image_provider", "openai_images") or "openai_images").lower()
+    base = str(agent.img_base or "").rstrip("/")
+    headers = {
+        "Authorization": f"Bearer {agent.img_key}",
+        "Content-Type": "application/json",
+    }
+    if provider == "sensenova_u1":
+        endpoint = base if base.endswith("/images/generations") else f"{base}/images/generations"
+        body = {
+            "model": agent.image_model,
+            "prompt": prompt,
+            "size": _SENSENOVA_U1_SIZE.get(aspect_ratio, "2752x1536"),
+            "response_format": "url",
+            "output_format": "png",
+        }
+    elif provider == "openai_images":
+        endpoint = base if base.endswith("/images/generations") else f"{base}/images/generations"
+        body = {"model": agent.image_model, "prompt": prompt, "size": size, "n": 1}
+    else:
+        raise ValueError(f"不支持的生图服务类型: {provider}")
+    # Image generation can legitimately take several minutes under load. Keep
+    # the timeout per request (one image) so a slow image does not prematurely
+    # fail an otherwise healthy generation task.
+    response = requests.post(endpoint, headers=headers, json=body, timeout=600)
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("生图服务返回的不是 JSON 对象")
+    return payload
+
+
+def _image_candidates(value, *, field=""):
+    """Yield image data URLs, base64 values and downloadable URLs from provider JSON.
+
+    Both SenseNova U1 and OpenAI-compatible image servers normally use
+    data[0].url/b64_json. Keep this parser deliberately tolerant so compatible
+    gateways returning content blocks or message.images still work.
+    """
+    if isinstance(value, dict):
+        preferred = (
+            "b64_json", "image_base64", "base64", "image_url", "url",
+            "images", "content", "data", "output", "choices", "message",
+        )
+        seen = set()
+        for key in preferred:
+            if key in value:
+                seen.add(key)
+                yield from _image_candidates(value[key], field=key)
+        for key, child in value.items():
+            if key not in seen:
+                yield from _image_candidates(child, field=key)
+        return
+    if isinstance(value, list):
+        for item in value:
+            yield from _image_candidates(item, field=field)
+        return
+    if not isinstance(value, str):
+        return
+    text = value.strip()
+    if not text:
+        return
+    if text.startswith("data:image/"):
+        yield ("data_url", text)
+        return
+    if field in {"b64_json", "image_base64", "base64"}:
+        yield ("base64", text)
+        return
+    if field in {"url", "image_url"} and text.startswith(("http://", "https://")):
+        yield ("url", text)
+        return
+    for match in re.finditer(r"!\[[^\]]*\]\((data:image/[^)\s]+|https?://[^)\s]+)\)", text):
+        target = match.group(1)
+        yield ("data_url" if target.startswith("data:image/") else "url", target)
+    for match in re.finditer(r"https?://[^\s<>\"')]+", text):
+        target = match.group(0).rstrip(".,;:")
+        if re.search(r"\.(?:png|jpe?g|webp|gif)(?:\?|$)", target, re.I):
+            yield ("url", target)
+
+
+def _image_bytes_from_payload(payload):
+    """Resolve the first image embedded in or referenced by a provider response."""
+    errors = []
+    for kind, value in _image_candidates(payload):
+        try:
+            if kind == "data_url":
+                encoded = value.split(",", 1)[1]
+                return base64.b64decode(encoded)
+            if kind == "base64":
+                return base64.b64decode(value)
+            if kind == "url":
+                response = requests.get(value, timeout=120)
+                response.raise_for_status()
+                if response.content:
+                    return response.content
+        except Exception as exc:
+            errors.append(str(exc)[:120])
+    if errors:
+        raise ValueError(f"图片结果解析失败: {errors[-1]}")
+    raise ValueError("响应中没有可识别的图片 URL 或 base64 数据")
 
 
 def _image_gen_one(agent, prompt, size, aspect_ratio=None):
@@ -645,35 +753,20 @@ def _image_gen_one(agent, prompt, size, aspect_ratio=None):
         )
     # 配图后端偶发瞬时不可用(503/超时/空 data),工具层退避重试,别让子 agent 几次手动重试就放弃丢图。
     # 配图是 deck 质量关键(用图率),这里多扛几次比丢一张 hero 图划算。
-    d, last_err = None, ""
-    for attempt in range(4):
+    data, last_err = None, ""
+    for attempt in range(3):
         try:
-            d = requests.post(f"{agent.img_base}/images/generations",
-                              headers={"Authorization": f"Bearer {agent.img_key}",
-                                       "Content-Type": "application/json"},
-                              json={"model": agent.image_model, "prompt": prompt, "size": size, "n": 1},
-                              timeout=180).json()
+            payload = _image_api_request(agent, prompt, size, aspect_ratio)
+            data = _image_bytes_from_payload(payload)
         except Exception as e:
             last_err = str(e)[:160]
-            d = None
-        if d is not None and "data" in d and d["data"]:
+            data = None
+        if data:
             break
-        if d is not None and "data" not in d:
-            last_err = json.dumps(d, ensure_ascii=False)[:160]
-        if attempt < 3:
-            time.sleep(3 * (attempt + 1))   # 3/6/9s 退避
-    if d is None or "data" not in d or not d["data"]:
-        return f"image_generate 错误(重试 4 次仍失败):{last_err}"
-    it = d["data"][0]
-    if it.get("b64_json"):
-        data = base64.b64decode(it["b64_json"])
-    elif it.get("url"):
-        try:
-            data = requests.get(it["url"], timeout=120).content
-        except Exception as e:
-            return f"image_generate 错误:下载图片失败 {e}"
-    else:
-        return "image_generate 错误:没有返回图片"
+        if attempt < 2:
+            time.sleep(3 * (attempt + 1))   # 3/6s 退避
+    if not data:
+        return f"image_generate 错误(重试 3 次仍失败):{last_err}"
     # hermes schema 无 out_path:用 prompt 的内容寻址名,保证并行子 agent 不撞名(同 prompt→同文件,无碍)。
     name = f"img_{hashlib.sha1(prompt.encode('utf-8')).hexdigest()[:10]}.png"
     rel = f"assets/{name}"
