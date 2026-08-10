@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SenseNova-Present{% endblock %}</title>
+  <script>
+    try {
+      const savedTheme = localStorage.getItem("studio_theme");
+      const theme = savedTheme === "dark" || savedTheme === "light"
+        ? savedTheme
+        : "dark";
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+      const savedLanguage = localStorage.getItem("studio_language");
+      const serverLanguage = "{{ default_language|default('zh') }}" === "en" ? "en" : "zh";
+      document.documentElement.lang = savedLanguage === "en" || savedLanguage === "zh"
+        ? savedLanguage
+        : serverLanguage;
+    } catch (_) {}
+  </script>
+  <link rel="icon" type="image/png" href="/static/sensenova-icon.png?v={{ asset_ver }}">
+  <link rel="apple-touch-icon" href="/static/sensenova-apple-icon.png?v={{ asset_ver }}">
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_ver }}-currentWorkNoIcon2">
+</head>
+<body>
+{% block body %}{% endblock %}
+  <script src="/static/app.js?v={{ asset_ver }}-reviewIcons1" defer></script>
+</body>
+</html>

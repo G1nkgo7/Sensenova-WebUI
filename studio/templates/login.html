@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}SenseNova-Present{% endblock %}
+{% block body %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <img class="brand-logo" src="/static/logo.svg?v={{ asset_ver }}" alt="">
+    <div class="brand-big">SenseNova-Present</div>
+    <p class="sub">登录以进入你的工作区</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post" action="/api/auth/login">
+      <label>用户名<input type="text" name="username" required autofocus autocomplete="username"></label>
+      <label>密码<input type="password" name="password" required autocomplete="current-password"></label>
+      <button type="submit">登录</button>
+    </form>
+    <p class="muted small">还没有账号? <a href="/register">注册一个</a></p>
+  </div>
+</div>
+{% endblock %}

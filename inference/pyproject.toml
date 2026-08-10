@@ -1,0 +1,17 @@
+[project]
+name = "sensenova-present-inference"
+version = "0.1.0"
+description = "PPTAgent generation engine for pptagent_static_web_demo"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.40",
+    "requests>=2.31",
+    "playwright>=1.40",
+    "rich>=13.0",
+    "pillow>=10.0",
+    "numpy>=1.24,<2",
+    "opencv-python-headless>=4.8,<4.11",
+    "python-pptx>=1.0.2",
+    "pymupdf>=1.24",
+    "fonttools[woff]>=4.56",
+]

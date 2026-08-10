@@ -1,0 +1,35 @@
+# Python / virtualenv
+__pycache__/
+*.py[cod]
+.venv/
+.python-version
+
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+
+# Runtime data and generated artifacts
+studio/data/
+distillation/data/
+distillation/data_openai/
+distillation/runs/
+distillation/logs/
+distillation/log/
+web/.cache/
+
+# Local deployment notes / backups
+NOTES.md
+*.bak
+*.bak-*
+*.db
+*.db-*
+*.db-shm
+*.db-wal
+*.log
+releases/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

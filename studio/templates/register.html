@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}SenseNova-Present{% endblock %}
+{% block body %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <img class="brand-logo" src="/static/logo.svg?v={{ asset_ver }}" alt="">
+    <div class="brand-big">SenseNova-Present</div>
+    <p class="sub">创建一个新账号</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <form method="post" action="/api/auth/register">
+      <label>用户名
+        <input type="text" name="username" value="{{ username or '' }}" required autofocus
+               minlength="3" maxlength="32" autocomplete="username"
+               placeholder="3-32 位,字母 / 数字 / _ . -">
+      </label>
+      <label>密码
+        <input type="password" name="password" required autocomplete="new-password"
+               placeholder="设置密码（无长度限制）">
+      </label>
+      <label>确认密码
+        <input type="password" name="password2" required autocomplete="new-password"
+               placeholder="再次输入密码">
+      </label>
+      <button type="submit">注册并进入</button>
+    </form>
+    <p class="muted small">已有账号? <a href="/login">去登录</a></p>
+  </div>
+</div>
+{% endblock %}

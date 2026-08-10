@@ -1,0 +1,698 @@
+{% extends "base.html" %}
+{% block title %}SenseNova Present Studio{% endblock %}
+{% block body %}
+<div class="layout" data-authenticated="{{ 1 if authenticated else 0 }}"
+     data-edition="{{ edition }}" data-auth-enabled="{{ 1 if auth_enabled else 0 }}"
+     data-dynamic-enabled="{{ 1 if dynamic_enabled else 0 }}"
+     data-default-language="{{ default_language|default('zh') }}"
+     data-trajectory-mode="{{ 1 if trajectory_mode|default(false) else 0 }}">
+  <aside class="sidebar">
+    <div class="sidebar-brand-row">
+      <div class="brand" aria-label="SenseNova Present Studio">
+        <span class="brand-mark-wrap"><img class="brand-mark" src="/static/sensenova-mark.png?v={{ asset_ver }}" alt=""></span>
+        <span class="brand-name"><strong><span>Sense</span><b>Nova</b></strong><em><b>Present</b><span>Studio</span></em></span>
+      </div>
+      <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="收起侧栏" aria-expanded="true" title="收起侧栏">
+        <svg class="sidebar-glyph" aria-hidden="true" viewBox="0 0 20 20" fill="none">
+          <defs><linearGradient id="sidebar-glyph-accent" x1="3" y1="5" x2="6" y2="15" gradientUnits="userSpaceOnUse"><stop stop-color="#8C68F4"/><stop offset="1" stop-color="#20D7A5"/></linearGradient></defs>
+          <rect class="sidebar-glyph-frame" x="1.75" y="2.25" width="16.5" height="15.5" rx="4.25"/>
+          <path class="sidebar-glyph-divider" d="M7.25 2.75V17.25"/>
+          <path class="sidebar-glyph-accent" d="M4.5 6.25V13.75"/>
+          <path class="sidebar-glyph-chevron" d="M13.25 6.9L10.15 10L13.25 13.1"/>
+        </svg>
+      </button>
+    </div>
+    <button class="new-btn" id="new-btn" title="新对话 · ⌘/Ctrl + K" aria-keyshortcuts="Control+K Meta+K">
+      <span class="new-btn-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <defs><linearGradient id="new-chat-plus-gradient" x1="7" y1="7" x2="17" y2="17" gradientUnits="userSpaceOnUse"><stop stop-color="#805DEB"/><stop offset=".52" stop-color="#7656E8"/><stop offset="1" stop-color="#10C99A"/></linearGradient></defs>
+          <path class="new-chat-plus" d="M12 6.7V17.3M6.7 12H17.3"/>
+        </svg>
+      </span>
+      <span class="new-btn-label" data-i18n="new_chat">新对话</span>
+      <span class="new-btn-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
+    </button>
+    <button class="batch-open-btn" id="batch-open-btn" hidden>⇧ 批量生成与下载</button>
+    <div class="rail-label" data-i18n="history">历史记录</div>
+    <div class="convo-list" id="deck-list"><div class="muted small pad">加载中…</div></div>
+    <div class="sidebar-foot">
+      <div class="brand-slogan" aria-label="坚持原创，让 AI 引领人类进步">
+        <span class="brand-slogan-mark" aria-hidden="true">✦</span>
+        <span>坚持原创，让 <b>AI</b> 引领人类进步</span>
+      </div>
+      <div class="user-menu-wrap">
+        <div class="user-menu" id="user-menu" hidden>
+          <div class="user-menu-account">
+            <span class="user-avatar user-avatar-small{% if not auth_enabled %} user-avatar-v1{% endif %}">
+              {% if not auth_enabled %}
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="rgba(255,255,255,.94)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.2" r="3.25"/><path d="M5.8 19c.55-3.45 2.55-5.2 6.2-5.2s5.65 1.75 6.2 5.2"/></svg>
+              {% else %}{{ (user['display_name'] or user['username'])[0]|upper }}{% endif %}
+            </span>
+            <span><strong>{{ 'SenseNova Present' if not auth_enabled else (user['display_name'] or user['username']) }}</strong><small>{{ 'V1 工作区用户' if not auth_enabled else ('管理员' if user['role'] == 'admin' else ('SenseNova Studio 用户' if authenticated else '登录后开始生成')) }}</small></span>
+          </div>
+          <div class="user-menu-preferences">
+            <div class="user-pref-row">
+              <span class="user-pref-label"><span aria-hidden="true">◐</span><span data-i18n="theme">主题</span></span>
+              <div class="user-theme-toggle" role="group" aria-label="界面主题">
+                <button type="button" data-theme-choice="light"><span>☀</span><b data-i18n="light">浅色</b></button>
+                <button type="button" data-theme-choice="dark"><span>☾</span><b data-i18n="dark">深色</b></button>
+              </div>
+            </div>
+            <label class="user-pref-row" for="settings-language">
+              <span class="user-pref-label"><span aria-hidden="true">文</span><span data-i18n="language">语言</span></span>
+              <select id="settings-language" aria-label="界面语言">
+                <option value="zh">简体中文</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </div>
+          <div class="font-control user-menu-font-control" id="font-control" hidden>
+            <input type="file" id="font-input" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
+            <button type="button" id="font-trigger" aria-expanded="false" aria-controls="font-panel">
+              <span class="user-menu-icon font-trigger-icon">Aa</span><span>字体配置</span><em id="font-current">智慧匹配</em><span class="user-menu-arrow font-chevron">›</span>
+            </button>
+            <div class="font-panel" id="font-panel" hidden>
+              <div class="font-panel-head"><strong>字体角色</strong><small>内置字体会随演示打包；也可上传你有权使用的字体</small></div>
+              <div class="font-role-grid">
+                <label><span>标题</span><select data-font-role="title"></select></label>
+                <label><span>正文</span><select data-font-role="body"></select></label>
+                <label><span>数字</span><select data-font-role="number"></select></label>
+                <label><span>批注</span><select data-font-role="annotation"></select></label>
+              </div>
+              <button type="button" class="font-upload" id="font-upload"><span>＋</span><strong>上传 TTF / OTF / WOFF / WOFF2</strong></button>
+              <div class="font-file-list" id="font-file-list" hidden></div>
+              <label class="font-license" id="font-license" hidden><input type="checkbox" id="font-license-ack"><span>我确认拥有所上传字体用于本演示及嵌入交付的权利</span></label>
+            </div>
+          </div>
+          <div class="user-menu-sep"></div>
+          <button type="button" class="auth-only" data-user-action="services" aria-haspopup="dialog" aria-controls="service-dialog"{% if not authenticated %} hidden{% endif %}><span class="user-menu-icon">⌁</span><span>{{ '设置' if not auth_enabled else '个人设置' }}</span></button>
+          {% if auth_enabled %}<button type="button" class="guest-only" data-user-action="auth"{% if authenticated %} hidden{% endif %}><span class="user-menu-icon">↗</span><span data-i18n="login_register">登录 / 注册</span></button>{% endif %}
+          <button type="button" data-user-action="new"><span class="user-menu-icon">＋</span><span data-i18n="new_presentation">新建演示</span></button>
+          <button type="button" class="auth-only" data-user-action="batch"{% if not authenticated %} hidden{% endif %}><span class="user-menu-icon">⇧</span><span data-i18n="batch">批量生成与下载</span></button>
+          <button type="button" onclick="window.location.href='/trajectory-monitor'"><span class="user-menu-icon">▤</span><span>生成轨迹</span></button>
+          <button type="button" class="auth-only" id="model-add-trigger" data-user-action="model" aria-haspopup="dialog" aria-controls="model-dialog"{% if not authenticated %} hidden{% endif %}><span class="user-menu-icon">◇</span><span>模型配置</span></button>
+          {% if dynamic_enabled %}
+          <div class="user-menu-sep"></div>
+          <button type="button" data-user-action="static"><span class="user-menu-icon">▦</span><span data-i18n="static_presentation">静态演示</span></button>
+          <button type="button" data-user-action="dynamic"><span class="user-menu-icon">✦</span><span data-i18n="dynamic_presentation">动态演示</span></button>
+          {% endif %}
+          {% if auth_enabled %}
+          <div class="user-menu-sep"></div>
+          <button type="button" class="auth-only" data-user-action="switch"{% if not authenticated %} hidden{% endif %}><span class="user-menu-icon">⇄</span><span data-i18n="switch_account">切换账号</span><span class="user-menu-arrow">›</span></button>
+          <button type="button" class="auth-only" data-user-action="logout"{% if not authenticated %} hidden{% endif %}><span class="user-menu-icon">↪</span><span data-i18n="logout">退出登录</span></button>
+          {% endif %}
+        </div>
+        <button type="button" class="user-profile" id="user-menu-trigger" aria-expanded="false" aria-controls="user-menu">
+          <span class="user-avatar{% if not auth_enabled %} user-avatar-v1{% endif %}">
+            {% if not auth_enabled %}
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="rgba(255,255,255,.94)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.2" r="3.25"/><path d="M5.8 19c.55-3.45 2.55-5.2 6.2-5.2s5.65 1.75 6.2 5.2"/></svg>
+            {% else %}{{ (user['display_name'] or user['username'])[0]|upper }}{% endif %}
+          </span>
+          <span class="user-profile-copy"><strong>{{ '用户' if not auth_enabled else (user['display_name'] or user['username']) }}</strong><small>{{ '模型、工具与界面' if not auth_enabled else ('管理员' if user['role'] == 'admin' else ('个人账号' if authenticated else '登录后开始生成')) }}</small></span>
+          <span class="user-profile-chevron">›</span>
+        </button>
+      </div>
+      <form id="logout-form" method="post" action="/api/auth/logout" hidden><button type="submit">退出</button></form>
+    </div>
+  </aside>
+
+  <button type="button" class="sidebar-scrim" id="sidebar-scrim" aria-label="关闭侧栏" tabindex="-1"></button>
+
+  <button type="button" class="sidebar-expand" id="sidebar-expand" aria-label="展开侧栏" aria-expanded="false" title="展开侧栏">
+    <svg class="sidebar-glyph" aria-hidden="true" viewBox="0 0 20 20" fill="none">
+      <rect class="sidebar-glyph-frame" x="1.75" y="2.25" width="16.5" height="15.5" rx="4.25"/>
+      <path class="sidebar-glyph-divider" d="M7.25 2.75V17.25"/>
+      <path class="sidebar-glyph-accent" d="M4.5 6.25V13.75"/>
+      <path class="sidebar-glyph-chevron" d="M10.15 6.9L13.25 10L10.15 13.1"/>
+    </svg>
+  </button>
+
+  <main class="main" id="main">
+    <!-- ============ 新对话 ============ -->
+    <section class="composer" id="composer">
+      <div class="creation-workspace" id="creation-workspace">
+      <div class="nova-ambient" aria-hidden="true">
+        <span class="nova-ribbon ribbon-one"></span>
+        <span class="nova-ribbon ribbon-two"></span>
+        <span class="nova-ribbon ribbon-three"></span>
+        <span class="nova-orb orb-one"></span>
+        <span class="nova-orb orb-two"></span>
+        <span class="nova-orb orb-three"></span>
+        <span class="nova-sweep sweep-one"></span>
+        <span class="nova-sweep sweep-two"></span>
+      </div>
+      <div class="composer-stage">
+        <div class="hero-cluster">
+        <div class="nova-art-logo nova-doodle" id="nova-doodle" aria-label="点阵 Present 与紫绿 SenseNova 切换动画">
+          <canvas id="nova-doodle-canvas" width="800" height="308" aria-hidden="true"></canvas>
+        </div>
+        <h1 class="lede-hero" data-i18n="hero_title">今天，你想展示什么？</h1>
+
+        <div class="prompt-suggestions" aria-label="示例需求">
+          <div class="suggestion-head"><span data-i18n="start_inspiration">从一个灵感开始</span><button type="button" id="refresh-suggestions" data-i18n="refresh">换一批</button></div>
+          <div class="suggestion-list" id="suggestion-list"></div>
+        </div>
+        </div>
+
+        <div class="composer-dock">
+        <div class="style-gallery" id="style-gallery" hidden>
+          <div class="style-gallery-head">
+            <div><strong>推荐风格</strong><span>选择后会应用到本次演示</span></div>
+            <button type="button" id="style-gallery-close" aria-label="关闭风格选择">×</button>
+          </div>
+          <div class="style-card-list" role="listbox" aria-label="演示视觉风格">
+            <button type="button" class="style-card selected" data-style="" role="option" aria-selected="true">
+              <span class="style-preview style-auto"><i></i><b>✦</b></span>
+              <span class="style-card-name">智慧匹配</span>
+              <span class="style-card-note">根据内容自动定调</span>
+            </button>
+            <button type="button" class="style-card" data-style="商务正式" role="option" aria-selected="false">
+              <span class="style-preview style-business"><i></i><b></b><em></em></span>
+              <span class="style-card-name">商务正式</span>
+              <span class="style-card-note">克制清晰，适合汇报</span>
+            </button>
+            <button type="button" class="style-card" data-style="学术严谨" role="option" aria-selected="false">
+              <span class="style-preview style-academic"><i></i><b></b><em></em></span>
+              <span class="style-card-name">学术严谨</span>
+              <span class="style-card-note">结构严密，图表优先</span>
+            </button>
+            <button type="button" class="style-card" data-style="科技感" role="option" aria-selected="false">
+              <span class="style-preview style-tech"><i></i><b></b></span>
+              <span class="style-card-name">科技感</span>
+              <span class="style-card-note">深色空间与动态光感</span>
+            </button>
+            <button type="button" class="style-card" data-style="活泼明快" role="option" aria-selected="false">
+              <span class="style-preview style-vivid"><i></i><b></b><em></em></span>
+              <span class="style-card-name">彩色创意</span>
+              <span class="style-card-note">撞色构图，更有活力</span>
+            </button>
+            <button type="button" class="style-card" data-style="极简" role="option" aria-selected="false">
+              <span class="style-preview style-minimal"><i></i><b></b></span>
+              <span class="style-card-name">极简留白</span>
+              <span class="style-card-note">大留白与编辑感排版</span>
+            </button>
+          </div>
+        </div>
+        <div class="creation-mode" aria-label="生成方式"{% if not dynamic_enabled %} hidden{% endif %}>
+          <div class="creation-mode-head"><span>选择呈现方式</span><em id="mode-summary">已选择静态演示</em></div>
+          <div class="creation-mode-options">
+            <button type="button" class="creation-mode-card selected" data-mode="static" aria-pressed="true">
+              <span class="cm-radio"></span><span class="cm-icon">▦</span>
+              <span class="cm-copy"><strong data-i18n="static_presentation">静态演示</strong><small>更稳重保守，专注信息层级与精美排版</small></span>
+              <span class="cm-tag">稳重 · 美观</span>
+            </button>
+            {% if dynamic_enabled %}<button type="button" class="creation-mode-card dynamic" data-mode="dynamic" aria-pressed="false">
+              <span class="cm-radio"></span><span class="cm-icon">✦</span>
+              <span class="cm-copy"><strong data-i18n="dynamic_presentation">动态演示</strong><small>更炫酷大胆，包含入场动画、转场与交互</small></span>
+              <span class="cm-tag">动效 · 交互</span>
+            </button>{% endif %}
+          </div>
+          <p class="hint" id="generation-hint">静态演示约需 20–35 分钟 · 期间可关闭页面 · ⌘/Ctrl + Enter 发送</p>
+        </div>
+
+        <div class="brief-card">
+          <div class="attach-list" id="attach-list" hidden aria-label="已选附件" aria-live="polite"></div>
+          <textarea id="q" rows="1" placeholder="描述你的主题、受众和想要的效果…" data-i18n-placeholder="prompt_placeholder"></textarea>
+        </div>
+
+        <div class="composer-actions">
+        <div class="attach-zone" id="attach-zone" hidden>
+          <input type="file" id="attach-input" multiple hidden>
+          <button type="button" id="attach-btn" class="attach-btn" aria-label="添加附件" aria-expanded="false" aria-controls="attach-menu" title="添加附件">
+            <span class="attach-plus" aria-hidden="true">＋</span><em id="attach-count" hidden>0</em>
+          </button>
+          <div class="attach-menu" id="attach-menu" hidden>
+            <button type="button" id="attach-upload-action">
+              <span class="attach-upload-icon" aria-hidden="true">↥</span>
+              <span><strong data-i18n="upload_files">上传文件或图片</strong><small data-i18n="upload_limit">最多 8 个，单个不超过 20MB</small></span>
+            </button>
+          </div>
+          <select id="attachment-mode" title="附件处理方式" hidden>
+            <option value="web_parse" selected>Web 解析</option>
+          </select>
+        </div>
+        <div class="length-control">
+          <button type="button" id="length-trigger" aria-expanded="false" aria-controls="length-menu">
+            <span class="length-trigger-icon">≡</span><span data-i18n="length">篇幅</span><em id="length-current">智慧推荐</em><span class="length-chevron">⌃</span>
+          </button>
+          <div class="length-menu" id="length-menu" hidden>
+            <div class="length-menu-title">篇幅</div>
+            <button type="button" class="selected" data-length="0"><span>✦</span><strong>智慧推荐</strong><i>✓</i></button>
+            <button type="button" data-length="4"><span>−</span><strong>精简</strong><i>✓</i></button>
+            <button type="button" data-length="8"><span>≡</span><strong>适中</strong><i>✓</i></button>
+            <button type="button" data-length="14"><span>≣</span><strong>详细</strong><i>✓</i></button>
+          </div>
+          <select id="length-sel" title="控制生成页数" hidden>
+            <option value="0" selected>智慧推荐</option>
+            <option value="4">精简 · 约4页</option>
+            <option value="8">适中 · 约8页</option>
+            <option value="14">详细 · 约14页</option>
+          </select>
+          <input id="length-num" type="number" value="0" hidden>
+        </div>
+        <div class="style-control">
+          <button type="button" id="style-trigger" aria-expanded="false" aria-controls="style-gallery">
+            <span class="style-trigger-icon">◉</span><span data-i18n="style">风格</span><em id="style-current">智慧匹配</em><span class="style-chevron">⌃</span>
+          </button>
+          <select id="style-sel" title="视觉风格" hidden>
+            <option value="" selected>智慧匹配</option>
+            <option>商务正式</option><option>学术严谨</option><option>科技感</option>
+            <option>活泼明快</option><option>极简</option>
+          </select>
+        </div>
+        <div class="static-settings" id="common-settings">
+      <div class="model-pick" title="选择生成模型和 Skill；管线按当前适配版本自动使用">
+        <div class="model-control">
+          <button type="button" id="model-trigger" aria-expanded="false" aria-controls="model-menu">
+            <span class="model-trigger-icon">◇</span><span data-i18n="model">模型</span><em id="model-current">配置模型</em><span class="model-chevron">⌃</span>
+          </button>
+          <div class="model-menu" id="model-menu" hidden>
+            <div class="model-menu-title">模型</div>
+            {% for model in models %}
+            {% set key = model[0] %}
+            {% set label = model[1] %}
+            <div class="model-menu-row"{% if key.startswith('custom:') %} data-custom-model="1"{% endif %}>
+              <button type="button" class="model-menu-option{% if key == default_model %} selected{% endif %}" data-model="{{ key }}"><span>{% if key.startswith('custom:') %}✦{% else %}◇{% endif %}</span><strong>{{ label }}</strong><small>{% if key.startswith('custom:') %}自定义{% else %}部署配置{% endif %}</small><i>✓</i></button>
+              {% if key.startswith('custom:') %}<button type="button" class="model-menu-delete" data-delete-model="{{ key }}" aria-label="删除 {{ label }}" title="删除模型">×</button>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          <select id="model-sel" hidden>
+            {% for model in models %}
+            {% set key = model[0] %}
+            {% set label = model[1] %}
+            {% set backend = model[2] %}
+            {% set auto_pipeline = model[3] if model|length > 3 else default_pipeline %}
+            {% set thinking_toggle = model[5] if model|length > 5 else 0 %}
+            <option value="{{ key }}" data-backend="{{ backend }}" data-default-pipeline="{{ auto_pipeline }}" data-thinking-toggle="{{ thinking_toggle }}" data-custom="{% if key.startswith('custom:') %}1{% else %}0{% endif %}"{% if key == default_model %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="thinking-control" id="thinking-control">
+          <button type="button" id="thinking-toggle" role="checkbox" aria-checked="true" title="勾选后，模型会在回答前进行更充分的推理；生成通常会更慢">
+            <span class="thinking-check" aria-hidden="true"></span><span>深度思考</span>
+          </button>
+          <input id="thinking-sel" type="checkbox" checked hidden>
+        </div>
+        <span class="mp-label pipeline-label">管线</span>
+        {% set stack = generation_stack|default({}) %}
+        <span id="pipeline-display" class="stack-display" title="自动使用当前适配的最新版管线">{{ stack.pipeline_label|default(default_pipeline) }}</span>
+        <select id="pipeline-sel" hidden>
+          {% for key, label, supports, skill_mode, caps, ready in pipelines %}
+          <option value="{{ key }}" data-supports="{{ supports }}" data-skill-mode="{{ skill_mode }}" data-caps="{{ caps }}" data-ready="{{ ready }}"{% if key == default_pipeline %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <div class="skill-control" id="skill-control">
+          <button type="button" id="skill-trigger" aria-expanded="false" aria-controls="skill-menu">
+            <span class="skill-trigger-icon">✦</span><span data-i18n="skill">Skill</span><em id="skill-current" hidden>{{ stack.skill_label|default('Visual Craft HTML PPT') }}</em><span class="skill-chevron">⌃</span>
+          </button>
+          <div class="skill-menu" id="skill-menu" hidden><div class="skill-menu-title">Skill</div></div>
+          <select id="skill-sel" hidden>
+            {% for skill in skills %}
+            {% set key = skill[0] %}
+            {% if key != 'long-horizon-grouped' %}
+            {% set label = skill[1] %}
+            {% set skill_pipeline = skill[2] if skill|length > 2 else default_pipeline %}
+            {% set ready = skill[3] if skill|length > 3 else 1 %}
+            {% set reason = skill[4] if skill|length > 4 else '' %}
+            <option value="{{ key }}" data-pipeline="{{ skill_pipeline }}" data-ready="{{ ready }}" title="{{ reason }}"{% if not ready %} disabled{% endif %}{% if key == default_skill %} selected{% endif %}>{{ label }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+        </div>
+
+        <button id="send" data-i18n="generate">开始生成</button>
+        </div>
+
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <div class="model-modal" id="model-modal" hidden>
+      <div class="model-dialog" id="model-dialog" role="dialog" aria-modal="true" aria-labelledby="model-dialog-title">
+        <div class="model-dialog-head">
+          <div><span class="model-dialog-kicker">MULTIMODAL MODEL</span><h2 id="model-dialog-title">模型配置</h2></div>
+          <button type="button" class="model-dialog-close" id="model-dialog-close" aria-label="关闭">×</button>
+        </div>
+        <p class="model-dialog-intro">连接兼容 OpenAI Chat Completions 的多模态模型。网页添加的模型可在模型菜单或下方列表中删除；由启动环境注入的模型需修改部署配置。{% if auth_enabled %}配置仅对当前账号可见。{% else %}配置保存在当前部署的工作区中。{% endif %}</p>
+        <form id="model-form" autocomplete="off">
+          <label><span>模型名称</span><input id="custom-model-name" name="name" maxlength="80" placeholder="例如：我的视觉模型" required></label>
+          <label><span>Model ID</span><input id="custom-model-id" name="model_id" maxlength="180" placeholder="例如：my-vision-model-v1" required></label>
+          <label class="model-field-wide"><span>Base URL</span><input id="custom-model-url" name="base_url" type="url" maxlength="500" placeholder="https://example.com/v1" required></label>
+          <label class="model-field-wide"><span>API Key <em>可选</em></span><input id="custom-model-key" name="api_key" type="password" maxlength="4096" placeholder="sk-••••••••" autocomplete="new-password"></label>
+          <div class="model-security-note"><span>⌁</span><p><strong>主模型必填，素材服务可选</strong><small>添加主模型后即可生成；AI 生图与联网搜索可稍后在“用户 → 设置”配置，未配置时会按现有能力降级。API Key 仅在服务端加密保存。</small></p></div>
+          <div class="model-form-error" id="model-form-error" role="alert" hidden></div>
+          <div class="model-form-actions"><button type="button" id="model-form-cancel">取消</button><button type="submit" class="primary">添加并选择</button></div>
+        </form>
+        <div class="custom-models-section" id="custom-models-section" hidden>
+          <div class="custom-models-title">已添加的自定义模型 · 可删除</div>
+          <div class="custom-model-list" id="custom-model-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="service-modal" id="service-modal" hidden>
+      <div class="service-dialog" id="service-dialog" role="dialog" aria-modal="true" aria-labelledby="service-dialog-title">
+        <div class="model-dialog-head">
+          <div><span class="model-dialog-kicker">PERSONAL SETTINGS</span><h2 id="service-dialog-title">个人设置</h2></div>
+          <button type="button" class="model-dialog-close" id="service-dialog-close" aria-label="关闭">×</button>
+        </div>
+        <p class="model-dialog-intro">配置当前账号的 Agent 运行参数与外部服务；新任务会记录发起时的参数。</p>
+        <form id="service-form" autocomplete="off">
+          <section class="service-config-card is-enabled service-generation-card" data-service-card="generation">
+            <div class="service-config-head">
+              <span class="service-config-icon generation" aria-hidden="true">⌁</span>
+              <span><strong>Agent 运行参数</strong><small>{% if dynamic_enabled %}同时适用于静态与动态演示的新任务{% else %}适用于静态演示的新任务{% endif %}</small></span>
+              <button type="button" class="service-reset" id="service-generation-reset">恢复默认</button>
+            </div>
+            <div class="service-config-fields">
+              <label class="service-field-wide"><span>每轮最大输出 Tokens <em>2,000–65,536</em></span><input id="service-max-tokens" type="number" min="2000" max="65536" step="512" value="40960" required></label>
+              <label class="service-switch service-field-wide"><input type="checkbox" id="service-streaming-enabled" checked><span></span><em>实时流式轨迹 · 关闭后按完整 Agent 回合更新</em></label>
+              <label><span>静态主 Agent 最大轮次 <em>0 使用 Harness 默认</em></span><input id="service-static-max-turns" type="number" min="0" max="8192" step="1" value="4096" required></label>
+              <label><span>静态子 Agent 最大轮次 <em>每个 · 默认 200；0 使用 Harness 默认</em></span><input id="service-static-subagent-max-turns" type="number" min="0" max="8192" step="1" value="200" required></label>
+              {% if dynamic_enabled %}<label><span>动态最大轮次 <em>1–16,384</em></span><input id="service-dynamic-max-turns" type="number" min="1" max="16384" step="1" value="4096" required></label>{% else %}<input id="service-dynamic-max-turns" type="hidden" value="4096">{% endif %}
+            </div>
+            <p class="service-generation-note">流式只改变实时轨迹的展示与增量落盘，不改变最终模型消息；不支持流式的后端会在轨迹配置中如实记录 effective=false。静态主 Agent 与动态 Agent 默认 4096 轮，静态子 Agent 默认每个 200 轮。</p>
+          </section>
+          <section class="service-config-card" data-service-card="image">
+            <div class="service-config-head">
+              <span class="service-config-icon image" aria-hidden="true">✦</span>
+              <span><strong>生图模型</strong><small>OpenAI Images API 兼容服务</small></span>
+              <label class="service-switch"><input type="checkbox" id="service-image-enabled"><span></span><em>使用个人配置</em></label>
+            </div>
+            <div class="service-config-fields">
+              <label class="service-field-wide"><span>Base URL</span><input id="service-image-url" type="url" maxlength="500" placeholder="https://example.com/v1"></label>
+              <label><span>模型名称</span><input id="service-image-model" maxlength="180" placeholder="gpt-image-2"></label>
+              <label><span>API Key <em id="service-image-key-state">未配置</em></span><input id="service-image-key" type="password" maxlength="4096" placeholder="填写新 Key" autocomplete="new-password"></label>
+              <label class="service-clear-key" id="service-image-clear-wrap" hidden><input type="checkbox" id="service-image-clear"><span>清除已保存的 Key</span></label>
+            </div>
+          </section>
+          <section class="service-config-card" data-service-card="search">
+            <div class="service-config-head">
+              <span class="service-config-icon search" aria-hidden="true">⌕</span>
+              <span><strong>联网搜索与搜图</strong><small>Serper API 兼容服务</small></span>
+              <label class="service-switch"><input type="checkbox" id="service-search-enabled"><span></span><em>使用个人配置</em></label>
+            </div>
+            <div class="service-config-fields">
+              <label class="service-field-wide"><span>Base URL</span><input id="service-search-url" type="url" maxlength="500" placeholder="https://google.serper.dev"></label>
+              <label class="service-field-wide"><span>API Key <em id="service-search-key-state">未配置</em></span><input id="service-search-key" type="password" maxlength="4096" placeholder="填写新 Key" autocomplete="new-password"></label>
+              <label class="service-clear-key" id="service-search-clear-wrap" hidden><input type="checkbox" id="service-search-clear"><span>清除已保存的 Key</span></label>
+            </div>
+          </section>
+          <div class="model-security-note service-security-note"><span>⌁</span><p><strong>账号级安全存储</strong><small>每个账号使用独立配置文件，API Key 加密落盘且不会在页面回显。</small></p></div>
+          <div class="model-form-error" id="service-form-error" role="alert" hidden></div>
+          <div class="model-form-actions"><button type="button" id="service-form-cancel">取消</button><button type="submit" class="primary">保存配置</button></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ============ 生成视图:胶片条 + 画布 ============ -->
+    <section class="editor" id="editor" hidden>
+      <header class="ed-top">
+        <button class="link" id="back-btn">← 返回</button>
+        <div class="ed-title" id="ed-title">演示文稿</div>
+        <nav class="workspace-view-switch" id="workspace-view-switch" aria-label="切换过程与实时 PPT">
+          <button type="button" data-workspace-view="process" class="on" aria-pressed="true">
+            <span class="workspace-view-icon workspace-view-icon-process" aria-hidden="true"><i></i><i></i><i></i></span>
+            过程
+          </button>
+          <button type="button" data-workspace-view="ppt" aria-pressed="false">
+            <span class="workspace-view-icon workspace-view-icon-ppt" aria-hidden="true"></span>
+            实时 PPT
+          </button>
+        </nav>
+        <div class="ed-action-cluster">
+          <div class="ed-status" id="ed-status"></div>
+          <button type="button" class="proc-toggle btn-ghost" id="proc-toggle" aria-expanded="false" aria-controls="proc-rail"><span aria-hidden="true">✦</span> 制作详情</button>
+          <div class="ed-actions" id="ed-actions"></div>
+        </div>
+      </header>
+
+      <div class="ed-progressline"><div class="bar" id="ed-bar"></div></div>
+
+      <div class="ed-body">
+        <div class="filmstrip" id="filmstrip"></div>
+        <div class="canvas-wrap">
+          <div class="canvas" id="canvas">
+            <div class="canvas-empty" id="canvas-empty">
+              <div class="develop-ring"></div>
+              <div class="ce-text">正在筹备第一页…</div>
+            </div>
+            <img id="canvas-img" alt="" hidden>
+            <iframe id="canvas-deck" title="演示文稿 HTML 播放预览" scrolling="no" hidden></iframe>
+          </div>
+          <div class="canvas-bottom-dock">
+            <div class="canvas-bar">
+              <button class="nav-btn" id="prev-btn" title="上一页 (←)">←</button>
+              <div class="canvas-pos" id="canvas-pos">– / –</div>
+              <button class="nav-btn" id="next-btn" title="下一页 (→)">→</button>
+              <button class="follow-btn" id="follow-btn" title="自动跳到最新生成的一页">跟随最新</button>
+              <div class="view-toggle" id="view-toggle" title="切换当前页：页面预览 / 消息" data-active="ppt">
+                <button type="button" data-view="ppt" class="on">页面预览</button>
+                <button type="button" data-view="console">消息</button>
+              </div>
+            </div>
+            <section class="page-speech-drawer collapsed" id="pr-speech-section" hidden>
+              <div class="page-speech-head">
+                <button type="button" class="page-speech-toggle" id="page-speech-toggle" aria-expanded="false" aria-controls="page-speech-body">
+                  <span class="page-speech-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span class="page-speech-heading"><b>本页讲稿</b><i id="pr-speech-state" hidden>正在读取讲稿…</i></span>
+                  <span class="page-speech-chevron" aria-hidden="true"></span>
+                </button>
+                <button type="button" class="page-speech-source-toggle" id="page-speech-source-toggle" aria-expanded="false" aria-controls="page-speech-evidence" hidden>
+                  <span>来源</span><i aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="pr-rail-body page-speech-body" id="page-speech-body">
+                <div class="pr-speech-content" id="pr-speech-content"></div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <button type="button" class="proc-scrim" id="proc-scrim" aria-label="关闭制作详情" tabindex="-1"></button>
+
+        <!-- 右侧:生成过程栏(全高) -->
+        <aside class="proc-rail" id="proc-rail">
+          <div class="pr-head">
+            <button type="button" class="proc-rail-collapse" id="proc-rail-collapse" aria-label="收起制作详情" title="收起制作详情" aria-controls="proc-rail" aria-expanded="true">
+              <span aria-hidden="true"></span>
+            </button>
+            <span class="pr-elapsed" id="pr-elapsed"></span>
+          </div>
+          <div class="pr-count" id="pr-count">–</div>
+          <div class="pr-countlabel" id="pr-countlabel">页面已完成</div>
+          <div class="pr-runtime" id="pr-runtime" data-kind="static">
+            <span class="pr-runtime-icon">✦</span>
+            <span><b>多页面同步制作</b><i>完成整体规划后，多页内容与视觉会同步推进</i></span>
+          </div>
+          <details class="pr-config" id="pr-config">
+            <summary><span>任务配置</span><i id="pr-config-summary">深度思考：—</i><em aria-hidden="true">⌄</em></summary>
+            <div class="pr-config-body">
+              <div><span>模型</span><b id="pr-config-model">—</b></div>
+              <div><span>Skill</span><b id="pr-config-skill">—</b></div>
+              <div><span>深度思考</span><b id="pr-config-thinking">关闭</b></div>
+              <div><span>Agent 上限</span><b id="pr-config-runtime">—</b></div>
+              <div id="pr-config-pref-row" hidden><span>偏好</span><b id="pr-config-pref">—</b></div>
+            </div>
+          </details>
+          <div class="pr-line"><div class="bar" id="pr-bar"></div></div>
+          <ol class="pr-steps" id="pr-steps">
+            <li data-k="plan"><b>理解与规划</b><i>明确叙事结构与页面目标</i></li>
+            <li data-k="research"><b>素材与风格</b><i>准备事实、图像与视觉方向</i></li>
+            <li data-k="render"><b>页面制作</b><i>逐页完成内容、排版与渲染</i></li>
+            <li data-k="verify"><b>质量检查</b><i>成稿复审与全局一致性检查</i></li>
+            <li data-k="done"><b>完成</b><i></i></li>
+          </ol>
+          <div class="pr-act" id="pr-act"></div>
+          <section class="pr-page-history" id="pr-page-history" hidden>
+            <div class="pr-history-head">
+              <span><b id="pr-history-title">第 01 页 · 页面详情</b></span>
+              <span class="pr-history-live" aria-hidden="true"></span>
+            </div>
+            <div class="pr-history-scroll">
+              <!-- 本页规划移入制作详情栏，避免占用主预览的垂直空间。 -->
+              <div class="plan-panel" id="plan-panel" hidden>
+                <div class="pp-head">
+                  <span class="pp-kicker">BRIEF</span>
+                  <span class="pp-title" id="pp-title">本页规划</span>
+                  <a class="pp-link" id="pp-html" href="#" download hidden>页面源码</a>
+                  <button class="link pp-toggle" id="pp-toggle">展开</button>
+                </div>
+                <div class="pp-body" id="pp-body">
+                  <article class="md pp-md" id="pp-md"></article>
+                  <div class="pp-assets" id="pp-assets" hidden>
+                    <div class="pp-assets-label">相关素材</div>
+                    <div class="pp-assets-grid" id="pp-assets-grid"></div>
+                  </div>
+                </div>
+              </div>
+              <details class="pr-rail-section pr-check-section" id="pr-check-section" open>
+                <summary><span><b>真实检查记录</b><i id="pr-history-count"></i></span><em aria-hidden="true">⌄</em></summary>
+                <div class="pr-rail-body"><div class="pr-history-list" id="pr-history-list"></div></div>
+              </details>
+            </div>
+          </section>
+          <div class="pr-feed" id="pr-feed"></div>
+        </aside>
+        <button type="button" class="proc-rail-expand" id="proc-rail-expand" aria-label="展开制作详情" title="展开制作详情" aria-controls="proc-rail" aria-expanded="false">
+          <span aria-hidden="true"></span>
+        </button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+{% if auth_enabled %}
+<div class="auth-gate" id="auth-gate" hidden>
+  <div class="auth-gate-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-gate-title">
+    <div class="auth-gate-aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+    <button type="button" class="auth-gate-close" id="auth-gate-close" aria-label="关闭">×</button>
+    <div class="auth-gate-brand">
+      <img src="/static/sensenova-mark.png?v={{ asset_ver }}" alt="">
+      <span><strong>SenseNova</strong><b>Present</b></span>
+    </div>
+    <div class="auth-gate-copy">
+      <span class="auth-gate-kicker">CREATE WITH SENSENOVA</span>
+      <h2 id="auth-gate-title">登录后开始生成</h2>
+      <p>你的主题、演示类型和全部选项都会保留。</p>
+    </div>
+    <div class="auth-tabs" role="tablist" aria-label="账号操作" data-active="login">
+      <button type="button" class="selected" data-auth-tab="login" role="tab" aria-selected="true" aria-controls="auth-login-form">登录</button>
+      <button type="button" data-auth-tab="register" role="tab" aria-selected="false" aria-controls="auth-register-form">注册</button>
+    </div>
+    <div class="auth-gate-error" id="auth-gate-error" hidden></div>
+    <div class="auth-form-stage" id="auth-form-stage" data-active="login">
+      <form class="auth-gate-form" id="auth-login-form">
+        <label><span>用户名</span><input id="auth-login-username" name="username" type="text" required autocomplete="username" placeholder="输入用户名"></label>
+        <label><span>密码</span><input name="password" type="password" required autocomplete="current-password" placeholder="输入密码"></label>
+        <button type="submit"><span>登录并继续</span><i aria-hidden="true">→</i></button>
+      </form>
+      <form class="auth-gate-form" id="auth-register-form" hidden>
+        <label><span>用户名</span><input name="username" type="text" required minlength="3" maxlength="32" autocomplete="username" placeholder="3–32 位字母、数字或 _ . -"></label>
+        <label><span>密码</span><input name="password" type="password" required autocomplete="new-password" placeholder="设置密码"></label>
+        <label><span>确认密码</span><input name="password2" type="password" required autocomplete="new-password" placeholder="再次输入密码"></label>
+        <button type="submit"><span>创建账号并继续</span><i aria-hidden="true">→</i></button>
+      </form>
+    </div>
+    <p class="auth-gate-note"><span>✦</span> 登录仅在真正发起生成时需要</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="lightbox" id="lightbox" hidden><img id="lb-img" src="" alt=""></div>
+<div class="attachment-viewer" id="attachment-viewer" hidden>
+  <section class="attachment-viewer-card" role="dialog" aria-modal="true" aria-labelledby="attachment-viewer-title">
+    <header>
+      <div><span class="attachment-viewer-mark" id="attachment-viewer-mark" aria-hidden="true">↥</span><div><strong id="attachment-viewer-title">附件</strong><small id="attachment-viewer-meta"></small></div></div>
+      <button type="button" id="attachment-viewer-close" aria-label="关闭附件预览">×</button>
+    </header>
+    <div class="attachment-viewer-body" id="attachment-viewer-body"></div>
+    <footer>
+      <span id="attachment-viewer-tip">附件预览</span>
+      <a id="attachment-viewer-open" href="#" target="_blank" rel="noopener">在新窗口打开</a>
+      <a id="attachment-viewer-download" href="#" download>下载</a>
+    </footer>
+  </section>
+</div>
+<div class="overview-modal" id="overview-modal" hidden>
+  <div class="overview-dialog" role="dialog" aria-modal="true" aria-labelledby="overview-title">
+    <div class="overview-head">
+      <div>
+        <span id="overview-title">全页预览</span>
+        <small id="overview-count"></small>
+      </div>
+      <button type="button" class="link" id="overview-close">关闭</button>
+    </div>
+    <div class="overview-grid" id="overview-grid"></div>
+  </div>
+</div>
+<div class="batch-modal" id="batch-modal" hidden>
+  <div class="batch-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-title">
+    <div class="batch-head">
+      <div>
+        <span id="batch-title">批量生成 PPT</span>
+        <small>上传 query 文件或独立附件 ZIP，统一选择模型，完成后一次下载全部 PPT</small>
+      </div>
+      <button type="button" class="link" id="batch-close">关闭</button>
+    </div>
+    <div class="batch-layout">
+      <form class="batch-form" id="batch-form">
+        <label class="batch-file">
+          <span>批次包 / Query 文件</span>
+          <input id="batch-file" name="query_file" type="file" accept=".zip,.txt,.csv,.json,.jsonl,.ndjson" required>
+          <small>无附件可上传 TXT/CSV/JSON/JSONL；Long-horizon HTML PPT 会按 query 内容确定成稿语言。每条 query 使用不同附件时，请上传包含 queries.jsonl 的 ZIP。最多 50 条。</small>
+        </label>
+        <details class="batch-package-help">
+          <summary>查看独立附件 ZIP 示例</summary>
+          <pre>batch.zip
+├── queries.jsonl
+└── materials/
+    ├── report.pdf
+    └── logo.png
+
+{"query":"根据报告制作经营总结","lang":"zh","attachments":["materials/report.pdf"]}
+{"query":"Create a product launch deck","lang":"en","attachments":["materials/logo.png"]}</pre>
+        </details>
+        <label>
+          <span>批次名称（可选）</span>
+          <input id="batch-name" name="name" type="text" maxlength="80" placeholder="例如：7 月营销方案">
+        </label>
+        <div class="batch-selects">
+          <label>
+            <span>生成模型</span>
+            <select id="batch-model" name="model">
+              {% for model in models %}
+              <option value="{{ model[0] }}">{{ model[1] }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            <span>Skill</span>
+            <select id="batch-skill" name="skill">
+              {% for skill in skills %}
+              {% if skill[0] != 'long-horizon-grouped' %}
+              <option value="{{ skill[0] }}"{% if not skill[3] %} disabled{% endif %}>{{ skill[1] }}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </label>
+          <label class="batch-attachment-mode">
+            <span>附件处理</span>
+            <select id="batch-attachment-mode" name="attachment_mode">
+              <option value="web_parse">Web 解析</option>
+              <option value="pipeline_agent">管线处理</option>
+            </select>
+          </label>
+        </div>
+        <p class="batch-pref-note">篇幅、主题、风格和色系沿用主页面当前选择。</p>
+        <button class="gbtn batch-submit" id="batch-submit" type="submit">开始批量生成</button>
+        <div class="batch-error" id="batch-error" hidden></div>
+      </form>
+      <section class="batch-panel">
+        <div class="batch-panel-head">
+          <span>批次记录</span>
+          <button type="button" class="link" id="batch-refresh">刷新</button>
+        </div>
+        <div class="batch-history" id="batch-history"><div class="muted small">加载中…</div></div>
+        <div class="batch-detail" id="batch-detail" hidden>
+          <div class="batch-detail-head">
+            <div>
+              <strong id="batch-detail-name"></strong>
+              <small id="batch-detail-meta"></small>
+            </div>
+            <a class="btn-dl" id="batch-download" href="#" hidden>下载全部 PPT</a>
+          </div>
+          <div class="batch-meter"><div id="batch-meter-bar"></div></div>
+          <div class="batch-counts" id="batch-counts"></div>
+          <div class="batch-decks" id="batch-decks"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}

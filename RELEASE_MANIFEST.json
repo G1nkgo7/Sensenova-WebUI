@@ -1,0 +1,18 @@
+{
+  "product": "SenseNova Present WebUI",
+  "edition": "V1 static / no authentication",
+  "version": "v1.0.0",
+  "built_at_utc": "2026-08-10T06:29:54Z",
+  "source_revision": "45c5ec63ea50a569d078ac257e05f7ec20456293",
+  "source_worktree": "current working tree (including uncommitted UI changes)",
+  "skill": "long-horizon-presenter",
+  "harness": "long-horizon-presenter",
+  "display_name": "mural-presenter",
+  "offline_fonts_included": true,
+  "offline_font_count": 42,
+  "tree_sha256_before_manifest": "21fcb67551205bf595f68c7bd41f07518b2e445305d62aa6625fa331f31aa38b",
+  "file_count_before_manifest": 138,
+  "bytes_before_manifest": 126380320,
+  "runtime_data_included": false,
+  "secrets_included": false
+}

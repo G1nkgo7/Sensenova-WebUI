@@ -1,0 +1,26 @@
+[project]
+name = "ppt-inference-v2"
+version = "0.1.0"
+description = "PPT agentic SFT 数据推理 V2 —— 薄 harness(core/)+ PPT 入口(distill_ppt.py)"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.40",
+    "requests>=2.31",
+    "playwright>=1.40",
+    "rich>=13.0",
+    "pillow>=10.0",
+    "numpy>=1.24,<2",
+    "opencv-python-headless>=4.8,<4.11",
+    "python-pptx>=1.0.2",
+    "pymupdf>=1.28.0",
+    "fonttools[woff]>=4.56",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
