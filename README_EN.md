@@ -1,6 +1,6 @@
 # SenseNova Present WebUI
 
-SenseNova Present WebUI is a self-hosted AI presentation workspace. The public V1 release focuses on static HTML presentations and ships with the `mural-presenter` workflow (implemented by the bundled `long-horizon-presenter` Skill and Harness).
+SenseNova Present WebUI is a self-hosted AI presentation workspace. The public V1 release focuses on static HTML presentations and exposes one `sn-ppt-web` workflow. Its `long-horizon-presenter` Harness detects the query language and selects the frozen `sn-ppt-web-zh` or `sn-ppt-web-en` Skill package.
 
 The primary documentation is available in [Chinese](README.md). This page provides a concise English setup guide.
 
@@ -25,7 +25,7 @@ have actually completed end-to-end regression testing:
 |---|---|---|
 | Operating system | **macOS**: install, launch, generation, preview, and export | Linux, WSL2, and Windows Docker Desktop launch paths are provided but have not yet received equivalent full regression coverage |
 | Main model | A **SenseNova OpenAI-compatible multimodal model**, with Chat Completions, tool calling, and multimodal input | Other OpenAI-compatible models can be configured but are not automatically considered verified |
-| Image generation | **`gpt-image-2-adobe-2`** through our OpenAI Images-compatible service | Other image models have not been validated individually; image generation is optional |
+| Image generation | **OpenAI Images-compatible** (`openai_images`, verified with `gpt-image-2-adobe-2`) and **SenseNova U1** (`sensenova_u1`) providers | U1 uses the native SenseNova Images API; other image models have not been validated individually, and image generation is optional |
 | Image search | A **Serper-compatible search endpoint** (`google.serper.dev`) | Other search APIs are not guaranteed to work by changing only the URL; search is optional |
 
 For combinations outside this table, run a 2–3 slide smoke case before production use.
@@ -33,7 +33,7 @@ For combinations outside this table, run a 2–3 slide smoke case before product
 ### API response contracts
 
 - **Main model:** non-streaming OpenAI-compatible `POST /chat/completions`; the response must expose `choices[0].message` and `finish_reason`. Reliable generation requires standard OpenAI `tools`/`message.tool_calls` support and multimodal `image_url` blocks containing base64 data URLs. Optional thinking content may be returned as `message.reasoning` or `message.reasoning_content`.
-- **Image model:** `POST /images/generations` with `model`, `prompt`, `size`, and `n: 1`. The verified model is `gpt-image-2-adobe-2`. The response must contain either `data[0].b64_json` or a server-downloadable `data[0].url`. The client does not force a `response_format` value.
+- **Image model:** `openai_images` calls `POST /images/generations` with `model`, `prompt`, `size`, and `n: 1`; the verified model is `gpt-image-2-adobe-2`. `sensenova_u1` calls the native SenseNova Images API with a supported 1K size bucket, `response_format=url`, and `output_format=png`; the recommended model is `sensenova-u1-fast`. Responses must expose either `data[0].b64_json` or a server-downloadable `data[0].url`.
 - **Search:** Serper-compatible `POST /search` with `X-API-KEY`; text results come from `organic[]` (`title`, `link`, `snippet`) and image results from `images[]` (`title`, `imageUrl`, with `link` as fallback).
 
 An endpoint being reachable is not sufficient: models or services with different tool-call, multimodal, or response schemas require an adapter.
@@ -66,7 +66,7 @@ SENSENOVA_MODEL_DISPLAY_NAME=My multimodal model
 
 ```bash
 chmod +x start.sh
-./start.sh
+./start.sh --language en
 ```
 
 Open <http://127.0.0.1:8001>.
@@ -74,13 +74,14 @@ Open <http://127.0.0.1:8001>.
 To listen on the local network:
 
 ```bash
-./start.sh --host 0.0.0.0 --port 8001
+./start.sh --language en --host 0.0.0.0 --port 8001
 ```
 
 ### Windows with Docker Desktop
 
 ```powershell
 Copy-Item .env.example .env
+$env:STUDIO_LANGUAGE = "en"
 docker compose up --build -d
 docker compose logs -f sensenova-present
 ```
@@ -93,15 +94,36 @@ docker compose down
 
 Do not run `docker compose down -v` unless you intend to delete the persisted history and generated files.
 
+For native Windows UI debugging, use an explicit English startup language:
+
+```powershell
+.\start.ps1 -Language en -HostAddress 127.0.0.1 -Port 8001
+```
+
+Full deck generation on Windows should use Docker Desktop or WSL2.
+
 ## Optional services
 
 Image generation:
 
 ```dotenv
+SENSENOVA_IMAGE_PROVIDER=openai_images
 SENSENOVA_IMAGE_BASE_URL=https://image.example/v1
 SENSENOVA_IMAGE_MODEL=gpt-image-2-adobe-2
 SENSENOVA_IMAGE_API_KEY=replace-me
 ```
+
+SenseNova U1 can be selected as a separate provider:
+
+```dotenv
+SENSENOVA_IMAGE_PROVIDER=sensenova_u1
+SENSENOVA_IMAGE_BASE_URL=https://token.sensenova.cn/v1
+SENSENOVA_IMAGE_MODEL=sensenova-u1-fast
+SENSENOVA_IMAGE_API_KEY=replace-me
+```
+
+This provider calls `POST /images/generations` with SenseNova's supported size
+buckets and downloads the returned `data[].url` image.
 
 Search:
 

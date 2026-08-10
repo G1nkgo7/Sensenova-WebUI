@@ -5,9 +5,12 @@
   "built_at_utc": "2026-08-10T06:29:54Z",
   "source_revision": "45c5ec63ea50a569d078ac257e05f7ec20456293",
   "source_worktree": "current working tree (including uncommitted UI changes)",
-  "skill": "long-horizon-presenter",
+  "skills": [
+    "sn-ppt-web-zh",
+    "sn-ppt-web-en"
+  ],
   "harness": "long-horizon-presenter",
-  "display_name": "mural-presenter",
+  "display_name": "sn-ppt-web",
   "offline_fonts_included": true,
   "offline_font_count": 42,
   "tree_sha256_before_manifest": "21fcb67551205bf595f68c7bd41f07518b2e445305d62aa6625fa331f31aa38b",

@@ -425,6 +425,9 @@ def _long_horizon_presenter_skill(
         "core/trace.py",
     )
     missing_skill = [relative for relative in required_files if not (skill_root / relative).is_file()]
+    for frozen_name in ("sn-ppt-web-zh", "sn-ppt-web-en"):
+        if not (skill_root.parent / frozen_name / "SKILL.md").is_file():
+            missing_skill.append(f"../{frozen_name}/SKILL.md")
     missing_harness = [relative for relative in harness_required if not (harness_root / relative).is_file()]
     reasons = []
     if missing_skill:
@@ -434,13 +437,15 @@ def _long_horizon_presenter_skill(
     digest = hashlib.sha256()
     if not missing_skill:
         _hash_runtime_tree(digest, skill_root)
+        _hash_runtime_tree(digest, skill_root.parent / "sn-ppt-web-zh", prefix="sn-ppt-web-zh/")
+        _hash_runtime_tree(digest, skill_root.parent / "sn-ppt-web-en", prefix="sn-ppt-web-en/")
     if not missing_harness:
         _hash_runtime_tree(digest, harness_root, prefix="harness/")
     ready = not missing_skill and not missing_harness
     return {
         "label": os.environ.get(
             "PPTAGENT_LONG_HORIZON_PRESENTER_DISPLAY_NAME",
-            "long-horizon-presenter",
+            "sn-ppt-web",
         ),
         "path": str(skill_root),
         "skills_root": str(skill_root.parent),
@@ -515,7 +520,7 @@ def _mural_presenter_skill(
         _hash_runtime_tree(digest, harness_root, prefix="harness/")
     ready = not missing_skill and not missing_harness
     return {
-        "label": "mural-presenter",
+        "label": "sn-ppt-web",
         "path": str(skill_root),
         "skills_root": str(skill_root.parent),
         "name": "mural-presenter",
@@ -739,7 +744,7 @@ def _long_horizon_presenter_pipeline(skill: dict | None = None) -> dict:
 def _mural_presenter_pipeline(skill: dict | None = None) -> dict:
     skill = skill or SKILLS.get("mural-presenter") or _mural_presenter_skill()
     return {
-        "label": "mural-presenter harness",
+        "label": "sn-ppt-web harness",
         "path": str(MURAL_PRESENTER_HARNESS_ROOT),
         "entry": MURAL_PRESENTER_HARNESS_ENTRY,
         "supports": ["anthropic", "openai"],

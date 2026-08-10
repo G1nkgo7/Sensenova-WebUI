@@ -213,18 +213,52 @@ function refreshDeckListWhenIdle(active) {
 }
 
 const SUGGESTION_POOL = [
-  { label: "精品咖啡新品宣传 · 8 页", query: "为一家精品咖啡品牌制作 8 页新品宣传 PPT，突出产地故事、风味和门店活动" },
-  { label: "生成式 AI 趋势 · 管理层汇报", query: "做一份面向管理层的生成式 AI 行业趋势汇报，包含机会、风险与落地路线图" },
-  { label: "城市夜跑活动 · 招商方案", query: "为城市夜跑活动设计一份活力感招商方案，突出人群、传播和赞助权益" },
-  { label: "新能源汽车 · 年度市场洞察", query: "制作一份新能源汽车年度市场洞察，比较品牌格局、用户需求与未来趋势" },
-  { label: "季度经营数据 · 高管简报", query: "把季度经营数据整理成简洁的高管汇报，强调关键增长点和下一步行动" },
-  { label: "深海探索 · 中学生科普", query: "做一份关于深海探索的科普演示，面向中学生，视觉要神秘而有趣" },
-  { label: "AI 学习助手 · 产品发布会", query: "为一款 AI 学习助手制作产品发布会 PPT，包含痛点、能力、案例和商业模式" },
-  { label: "东方茶饮 · 品牌视觉提案", query: "设计一份东方美学茶饮品牌提案，突出品牌故事、视觉体系与首店规划" },
-  { label: "远程医疗 · 创业项目路演", query: "制作一份远程医疗创业项目路演，说明市场、产品、壁垒、增长和融资计划" },
-  { label: "博物馆数字化 · 沉浸体验", query: "做一份博物馆数字化体验方案，结合沉浸式展陈、互动导览和社交传播" },
-  { label: "新人入职 · 第一周指南", query: "为公司新人制作一份轻松有趣的入职指南，涵盖文化、协作方式与第一周任务" },
-  { label: "可持续时尚 · 影响力报告", query: "制作一份可持续时尚品牌的年度影响力报告，突出材料、供应链和社区项目" },
+  {
+    label: "山系度假民宿 · 招商与 OTA",
+    query: `我新开了一家山系度假民宿，需要一份25页左右的产品介绍资料PPT，用于招商洽谈和OTA平台上架资料参考。
+内容上包括民宿招商该有的板块：选址与环境卖点、房型配置与定价策略、配套设施与体验活动、目标客群画像、淡旺季运营思路、合规资质与安全保障，其他你判断该补的也一并补齐。
+配色定一个主色搭配一个辅助色，字体走山系度假那种松弛、自然、有呼吸感的调性。整体要精致、有设计感，排版要留得开、透得出山野气息，可以适度用大图叙事、房型信息卡片、简洁的数据图或时间线来讲清楚运营节奏。`,
+  },
+  {
+    label: "《沙丘》· 电影美学拆解",
+    query: `下周我要给影迷社群做一次《沙丘》电影美学与世界观设定的视觉拆解分享，25到35页之间，页数你根据内容节奏定。
+内容层面希望做扎实，别停留在剧情复述。围绕几个维度展开：厄拉科斯星球的地理与生态设定、香料经济与政治权力结构、弗雷曼人的文化与宗教符号、各大家族的视觉识别体系（服装、纹章、建筑语言）、导演维伦纽瓦和摄影师 Greig Fraser 的镜头语言与构图逻辑、汉斯·季默配乐与声音设计的美学取向、以及影片对粗野主义建筑和中东—北非文化的借鉴。每一块都要给出可以拿来跟朋友聊的具体观察和例证，涉及的设定、幕后信息、参考来源请核实准确。
+视觉做成一本顶级好莱坞概念艺术图册的质感，追求巨物压迫感和粗野主义的沉重体量。整体色板用废土黄、香料橘、沙岩灰。大量使用宽画幅满版剧照或概念图，让画面自己说话。字体选硬朗、字重偏轻的现代无衬线，营造干燥、灼热的空气感。页面节奏要有电影分镜的呼吸——极空的留白页、纯黑过场页和铺满巨物的震撼页交替出现。`,
+  },
+  {
+    label: "乡村振兴 · 产业路线汇报",
+    query: `我们驻村工作队下周要给镇里做乡村振兴项目进展汇报，报告体量控制在25页左右。整体叙事要先压住情绪再把希望托起来：前面讲村子现状和困境要平实记录，用真实数据慢慢加压；第15页左右的转折页必须做出极强的视觉冲击，色调瞬间从深沉切到暖橘色带来希望感；结尾落点要靠事实升华。
+中间核心是四条产业路线（果蔬、民宿、电商、加工）的深度横评。请按“投入、带动户数、周期、风险、可持续”五个统一维度，设计一页极具记忆点的 4×5 打分矩阵（使用高对比度热力色块或多边形雷达图组合，严禁默认表格），并据此明确给出要押注哪条路线的量化理由。请自行调研核实真实的行业参考数据。
+视觉美术走“大地纪实与破晓旭日”的杂志风。前半段使用深炭黑、泥土褐与粗糙夯土肌理，转折后引入大面积破晓暖光与自然图像；封面、转场及核心页对标《国家地理》的排版质感，用大画幅真实乡村影像结合不规则网格，拒绝同一版式反复套用。`,
+  },
+  {
+    label: "山区山洪 · 应急预案",
+    query: `下周要去给文旅局汇报一份山区农家乐的山洪应急预案，帮我出一份22页左右的对比分析方案。核心是详细拆解“沿河预警广播”与“手机短信推送”两种预警方式的实战优劣。
+第一部分调研并引用真实可查的山洪气象灾害数据；第二部分对比两种方案的响应延迟、信号死角覆盖率和断网断电极端天气下的可靠性；第三部分给出一套针对农家乐店主和游客的极简疏散 SOP。结论必须是可直接落地的实操建议。
+视觉采用“生态地貌与数字预警”融合风：森林苔藓绿、岩石灰配应急霓虹橙，贯穿地形等高线与气象雷达热力图，用半透明毛玻璃科技 UI 承载信息。核心页设计成上帝视角的 3D 微缩山水地貌模型；两种预警的对比使用多维雷达图和强反差左右分屏，避免默认表格和柱状图。`,
+  },
+  {
+    label: "开源软件 · 像素 RPG 科普",
+    query: `马上要在高校社团给大学生做一场关于开源软件的科普讲座，制作一份25页左右的演示文稿，内容必须实用且接地气。
+第一部分讲透什么是开源，并核查、引用学生每天都在使用却不知道是开源的真实软件案例；第二部分重点拆解 MIT、Apache、GPL 等常见许可证的核心区别，结合真实的开源维权或商业冲突案例，给出新手避坑指南，说明哪些能自由使用、哪些使用后必须公开自己的代码。
+视觉使用“8-bit 复古像素 RPG 游戏”风格，设置一个像素极客 NPC 作为向导，背景采用街机深渊黑、CRT 扫描线和粗颗粒像素网格，配色用高亮青、电光黄和品红。封面与章节页做成游戏启动界面和关卡地图；许可证区别做成 RPG 技能树或阵营九宫格，信息框统一为复古游戏对话框。`,
+  },
+  {
+    label: "农业卫星 · 太空老农历",
+    query: `我要给省农业厅和农业合作社农户代表做一份15页的农业监测低轨卫星星座组网发射科普与宣介PPT。为了让农户和基层工作者感受到技术价值，整体采用温馨质朴的现代手绘绘本风，把高精尖航天科技化作亲切的“天上新农具”，主色为阳光暖黄、沃野泥土棕和嫩芽初绿。
+内容按太空老农历“春耕、夏长、秋收、冬藏”推进：星座组网总览；卫星载荷与光谱成像原理；火箭发射与入轨步骤；终端数据接收；经济效益与助农政策落地。用太空稻草人、农作物体检报告、太空医生听诊器和智能老农历手机界面等比喻讲清复杂技术。
+排版大量使用手绘麦穗、小拖拉机和笑脸云朵点缀，进度条做成种子发芽到结出硕果的插画演变，让硬核航天项目充满接地气的人情味。`,
+  },
+  {
+    label: "家庭收纳 · 小白实用课程",
+    query: `想做一套家庭收纳整理的实用课程，面向完全没经验的小白，控制在24页左右。重点讲衣柜、厨房和玄关三个常见场景，用真实家庭案例展示整理前后对比和具体操作步骤。整体用轻松明快的卡通插画风，排版干净有设计感，让人看完就能照着动手整理。`,
+  },
+  {
+    label: "《霸王龙的晚餐》· 睡前科普",
+    query: `我想制作一份20页左右、面向4—8岁小朋友的睡前交互式科普课件PPT，主题叫《霸王龙的晚餐》。不要任何血腥撕咬或吓人的画面，要温馨幽默、充满童趣：以一只肚子咕咕叫但很友善的小霸王龙寻找晚饭为故事主线，带领小朋友认识不同恐龙的身体特征与生活环境。
+内容包括小霸王龙登场与恐龙世界地图、猜脚印和小短手互动；逐页探索梁龙、甲龙、三角龙与副栉龙；展示白垩纪密林、火山湖畔与蕨类植物森林；结尾反转为恐龙伙伴们举办树叶与野果晚宴，并自然引导小朋友准备睡觉。每页配大字号恐龙名片与极简互动知识。
+视觉采用温馨治愈的暖心绘本插画风，以燕麦奶黄和天空蓝为底，搭配暖阳黄、薄荷绿、珊瑚粉与小橘红。每页都有圆滚滚大眼睛的拟人化恐龙，字体使用超大字号软萌字体，版式采用翻翻书、卡通对话框与手绘点缀，让整套课件像一本温馨睡前童话。`,
+  },
 ];
 
 const NOVA_DOT_FONT = {
@@ -1218,6 +1252,23 @@ function syncServiceCards() {
   });
 }
 
+function syncImageProviderFields({ applyDefaults = false } = {}) {
+  const provider = $("#service-image-provider")?.value || "openai_images";
+  const isSenseNova = provider === "sensenova_u1";
+  const url = $("#service-image-url");
+  const model = $("#service-image-model");
+  const note = $("#service-image-provider-note");
+  if (note) note.textContent = isSenseNova
+    ? "SenseNova U1 · 原生 Images API"
+    : "OpenAI Images API 兼容服务";
+  if (url) url.placeholder = isSenseNova
+    ? "https://token.sensenova.cn/v1"
+    : "https://example.com/v1";
+  if (model) model.placeholder = isSenseNova ? "sensenova-u1-fast" : "gpt-image-2";
+  if (applyDefaults && isSenseNova && !url.value.trim()) url.value = "https://token.sensenova.cn/v1";
+  if (applyDefaults && isSenseNova && model && !model.value.trim()) model.value = "sensenova-u1-fast";
+}
+
 function applyServiceSettings(payload) {
   serviceSettings = payload || {};
   const image = serviceSettings.image_generation || {};
@@ -1229,6 +1280,7 @@ function applyServiceSettings(payload) {
   $("#service-static-subagent-max-turns").value = generation.static_subagent_max_turns ?? 200;
   $("#service-dynamic-max-turns").value = generation.dynamic_max_turns || 4096;
   $("#service-image-enabled").checked = !!image.enabled;
+  $("#service-image-provider").value = image.provider || "openai_images";
   $("#service-image-url").value = image.base_url || "";
   $("#service-image-model").value = image.model || "";
   $("#service-image-key").value = "";
@@ -1241,6 +1293,7 @@ function applyServiceSettings(payload) {
   $("#service-search-key-state").textContent = search.has_api_key ? "已安全保存" : "未配置";
   $("#service-search-clear-wrap").hidden = !search.has_api_key;
   $("#service-search-clear").checked = false;
+  syncImageProviderFields();
   syncServiceCards();
 }
 
@@ -1594,8 +1647,8 @@ function modelLabel(key) {
 const PIPELINE_LABEL = {
   infer: "Clean infer harness",
   "visual-craft-harness": "Visual Craft Harness",
-  "long-horizon-presenter-harness": "mural-presenter harness",
-  "mural-presenter-harness": "mural-presenter harness",
+  "long-horizon-presenter-harness": "sn-ppt-web harness",
+  "mural-presenter-harness": "sn-ppt-web harness",
   "sense-present-standard-harness": "SenseNova Static HTML Harness",
   "sense-present-dazzle-harness": "SenseNova Dynamic HTML Harness",
 };
@@ -1609,8 +1662,8 @@ const SKILL_LABEL = {
   "long-horizon-grouped": "Long-horizon HTML PPT Grouped",
   "long-horizon-grouped-inline-image": "Long-horizon Grouped · Inline Image",
   "visual-craft": "Visual Craft HTML PPT",
-  "long-horizon-presenter": "mural-presenter",
-  "mural-presenter": "mural-presenter",
+  "long-horizon-presenter": "sn-ppt-web",
+  "mural-presenter": "sn-ppt-web",
 };
 
 /* ---------------- 附件(随所选管线能力联动) ---------------- */
@@ -1880,13 +1933,59 @@ function syncAttachZone() {          // 附件仅开放给静态管线；动态�
   if (!on) setAttachMenu(false);
   if (!on && attachFiles.length) clearAttachFiles();
 }
+let fontPanelPositionFrame = 0;
+
+function positionFloatingFontPanel() {
+  const panel = $("#font-panel");
+  const trigger = $("#font-trigger");
+  if (!panel || !trigger || panel.hidden || !panel.classList.contains("font-panel-floating")) return;
+
+  const margin = 12;
+  const gap = 12;
+  const triggerRect = trigger.getBoundingClientRect();
+  const panelRect = panel.getBoundingClientRect();
+  const viewportWidth = window.visualViewport?.width || window.innerWidth;
+  const viewportHeight = window.visualViewport?.height || window.innerHeight;
+  const preferredLeft = triggerRect.right + gap;
+  const maxLeft = Math.max(margin, viewportWidth - panelRect.width - margin);
+  const left = Math.max(margin, Math.min(preferredLeft, maxLeft));
+  const preferredTop = triggerRect.bottom - panelRect.height;
+  const maxTop = Math.max(margin, viewportHeight - panelRect.height - margin);
+  const top = Math.max(margin, Math.min(preferredTop, maxTop));
+
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(top)}px`;
+}
+
+function queueFontPanelPosition() {
+  cancelAnimationFrame(fontPanelPositionFrame);
+  fontPanelPositionFrame = requestAnimationFrame(positionFloatingFontPanel);
+}
+
 function setFontPanel(open) {
   const panel = $("#font-panel"); const trigger = $("#font-trigger");
-  if (!panel || !trigger) return;
-  panel.hidden = !open;
-  trigger.classList.toggle("active", open);
-  trigger.setAttribute("aria-expanded", open ? "true" : "false");
+  const home = $("#font-control");
+  if (!panel || !trigger || !home) return;
+  const next = !!open;
+
+  if (next) {
+    if (panel.parentElement !== document.body) document.body.appendChild(panel);
+    panel.classList.add("font-panel-floating");
+    panel.hidden = false;
+    positionFloatingFontPanel();
+    queueFontPanelPosition();
+  } else {
+    panel.hidden = true;
+    panel.classList.remove("font-panel-floating");
+    panel.removeAttribute("style");
+    if (panel.parentElement !== home) home.appendChild(panel);
+  }
+  trigger.classList.toggle("active", next);
+  trigger.setAttribute("aria-expanded", next ? "true" : "false");
 }
+
+window.addEventListener("resize", queueFontPanelPosition);
+window.visualViewport?.addEventListener("resize", queueFontPanelPosition);
 function renderFontControls() {
   $$('[data-font-role]').forEach((select) => {
     const previous = select.value || "auto";
@@ -6959,6 +7058,7 @@ $("#service-modal").addEventListener("click", (event) => {
 ["image", "search"].forEach((name) => {
   $(`#service-${name}-enabled`).addEventListener("change", syncServiceCards);
 });
+$("#service-image-provider").addEventListener("change", () => syncImageProviderFields({ applyDefaults: true }));
 $("#service-generation-reset").addEventListener("click", () => {
   $("#service-max-tokens").value = 40960;
   $("#service-streaming-enabled").checked = true;
@@ -6979,6 +7079,7 @@ $("#service-form").addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         image_enabled: $("#service-image-enabled").checked,
+        image_provider: $("#service-image-provider").value,
         image_base_url: $("#service-image-url").value.trim(),
         image_model: $("#service-image-model").value.trim(),
         image_api_key: $("#service-image-key").value || null,

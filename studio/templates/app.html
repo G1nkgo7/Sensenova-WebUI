@@ -69,7 +69,7 @@
           <div class="font-control user-menu-font-control" id="font-control" hidden>
             <input type="file" id="font-input" accept=".ttf,.otf,.woff,.woff2" multiple hidden>
             <button type="button" id="font-trigger" aria-expanded="false" aria-controls="font-panel">
-              <span class="user-menu-icon font-trigger-icon">Aa</span><span>字体配置</span><em id="font-current">智慧匹配</em><span class="user-menu-arrow font-chevron">›</span>
+              <span class="user-menu-icon font-trigger-icon">Aa</span><span class="font-trigger-label">字体配置</span><em id="font-current">智慧匹配</em><span class="user-menu-arrow font-chevron" aria-hidden="true">›</span>
             </button>
             <div class="font-panel" id="font-panel" hidden>
               <div class="font-panel-head"><strong>字体角色</strong><small>内置字体会随演示打包；也可上传你有权使用的字体</small></div>
@@ -380,10 +380,11 @@
           <section class="service-config-card" data-service-card="image">
             <div class="service-config-head">
               <span class="service-config-icon image" aria-hidden="true">✦</span>
-              <span><strong>生图模型</strong><small>OpenAI Images API 兼容服务</small></span>
+              <span><strong>生图模型</strong><small id="service-image-provider-note">OpenAI Images API 兼容服务</small></span>
               <label class="service-switch"><input type="checkbox" id="service-image-enabled"><span></span><em>使用个人配置</em></label>
             </div>
             <div class="service-config-fields">
+              <label class="service-field-wide"><span>服务类型</span><select id="service-image-provider"><option value="openai_images">OpenAI Images API</option><option value="sensenova_u1">SenseNova U1 Images API</option></select></label>
               <label class="service-field-wide"><span>Base URL</span><input id="service-image-url" type="url" maxlength="500" placeholder="https://example.com/v1"></label>
               <label><span>模型名称</span><input id="service-image-model" maxlength="180" placeholder="gpt-image-2"></label>
               <label><span>API Key <em id="service-image-key-state">未配置</em></span><input id="service-image-key" type="password" maxlength="4096" placeholder="填写新 Key" autocomplete="new-password"></label>

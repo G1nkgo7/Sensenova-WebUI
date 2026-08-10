@@ -27,7 +27,7 @@ SenseNova Present 是一套可私有部署的 AI 演示文稿工作台。本发�
 
 - **V1 静态演示版**：不展示动态演示入口。
 - **免登录单用户模式**：首次打开即可使用，历史记录保存在本地数据目录。
-- **mural-presenter**：前端产品名；实际运行内置的最新版 `long-horizon-presenter` Skill 与配套 Harness，不依赖开发机上的 AFS 路径。
+- **sn-ppt-web**：前端统一产品名；`long-horizon-presenter` Harness 会按 query 语言自动选择冻结的 `sn-ppt-web-zh` 或 `sn-ppt-web-en` Skill，不依赖开发机上的 AFS 路径。
 - **跨平台启动方案**：macOS 已完成实际验证；Linux、WSL2 和 Windows Docker Desktop 提供启动脚本与部署方案，但尚未完成同等强度的全链路回归。
 
 > 模型、生图和搜索服务不包含在 ZIP 中。部署者需要填写自己的兼容 API 地址和密钥。
@@ -41,7 +41,7 @@ SenseNova Present 是一套可私有部署的 AI 演示文稿工作台。本发�
 |---|---|---|
 | 操作系统 | **macOS** 已完成安装、启动、生成、预览与导出链路验证 | Linux、WSL2、Windows Docker Desktop 已提供脚本/镜像方案，但尚未完成与 macOS 同等强度的完整回归 |
 | 主模型 | 使用 **SenseNova 自有 OpenAI-compatible 多模态模型** 验证；模型需支持 Chat Completions、工具调用和多模态输入 | 其他 OpenAI-compatible 模型可自行配置，但不代表已经验证，能力不足时可能在工具调用、长上下文或视觉输入阶段失败 |
-| 生图服务 | 目前仅对通过自有兼容服务接入的 **`gpt-image-2-adobe-2`** 完成实际验证 | 代码接受下文约定的 OpenAI Images API 兼容返回；其他生图模型尚未逐一验证，且生图能力可以不配置 |
+| 生图服务 | 支持 **OpenAI Images-compatible**（`openai_images`，已实测 `gpt-image-2-adobe-2`）和 **SenseNova U1**（`sensenova_u1`）两种 Provider | U1 通过 SenseNova 原生 Images API 接入；其他生图模型尚未逐一验证，且生图能力可以不配置 |
 | 搜图服务 | 目前仅验证 **Serper 兼容搜索接口**（`google.serper.dev`） | 其他搜索 API 不能仅靠填写 URL 直接保证兼容；搜图能力可以不配置 |
 
 如果你在上述范围之外部署，请先按照[验证安装](#7-验证安装)运行 2–3 页 Smoke Case，
@@ -60,14 +60,14 @@ SenseNova Present 是一套可私有部署的 AI 演示文稿工作台。本发�
 - 必须支持 OpenAI 多模态 `image_url` 内容块，并能读取 `data:image/...;base64,...`，否则 Vision 检查无法工作。
 - 当前只对 SenseNova 自有 OpenAI-compatible 多模态模型做过全链路验证；README 不把未实际测试的模型列为“已支持”。
 
-**配图模型（可选，当前实测 `gpt-image-2-adobe-2`）**
+**配图模型（可选）**
 
-- 请求：`POST {image_base_url}/images/generations`。
-- 请求体：`model`、`prompt`、`size`、`n: 1`。
+- `openai_images`：调用 `POST {image_base_url}/images/generations`，请求体包含 `model`、`prompt`、`size`、`n: 1`。当前实测模型为 `gpt-image-2-adobe-2`。
+- `sensenova_u1`：调用 SenseNova 原生 `POST {image_base_url}/images/generations`，使用 U1 支持的 1K 尺寸桶，并发送 `response_format=url`、`output_format=png`。推荐模型名为 `sensenova-u1-fast`。
 - 返回必须包含非空 `data` 数组；WebUI/Harness 接受以下任一模式：
   - Base64：`{"data":[{"b64_json":"..."}]}`；
   - URL：`{"data":[{"url":"https://..."}]}`，且该 URL 必须允许服务端直接下载。
-- 当前客户端不会强制发送 `response_format`，因此服务端可自行选择上述两种模式；其他字段会被忽略。
+- OpenAI Images Provider 不强制发送 `response_format`；SenseNova U1 Provider 会按其原生接口约定请求 URL 返回。
 
 **搜索服务（可选，当前实测 Serper）**
 
@@ -79,7 +79,7 @@ SenseNova Present 是一套可私有部署的 AI 演示文稿工作台。本发�
 ## 功能概览
 
 - 从自然语言和附件生成完整的静态 HTML 演示文稿。
-- 使用 `mural-presenter`（内部实现为 `long-horizon-presenter`）进行长链路规划、素材准备、逐页制作和视觉检查。
+- 使用 `sn-ppt-web`（内部为 `long-horizon-presenter` Harness + `sn-ppt-web-zh/en` 双 Skill）进行长链路规划、素材准备、逐页制作和视觉检查。
 - 支持 PDF、Office、Markdown、文本和图片等常用附件。
 - 在 WebUI 中查看制作过程、页面预览、讲稿、检查记录与历史任务。
 - 支持预览、播放以及带资源和字体的 HTML 导出。
@@ -94,7 +94,9 @@ SenseNova Present 是一套可私有部署的 AI 演示文稿工作台。本发�
 ```text
 SenseNovaPresent-WebUI-.../
 ├── bundled/static-ppt-skill-suite/
-│   ├── skills/long-horizon-presenter/
+│   ├── skills/sn-ppt-web-zh/
+│   ├── skills/sn-ppt-web-en/
+│   ├── skills/long-horizon-presenter/  # 安装兼容入口
 │   └── harnesses/long-horizon-presenter/
 ├── studio/                    FastAPI、前端和本地数据
 ├── inference/                 WebUI 到静态 Harness 的最小推理适配层
@@ -140,7 +142,7 @@ Windows 推荐以下任一方式：
 1. **Docker Desktop（最省心）**：Windows 10/11 + WSL2 backend。
 2. **WSL2 Ubuntu**：在 WSL 终端中按 Linux 步骤启动。
 
-`start.ps1` 可以原生启动 WebUI，但 mural-presenter（内部实现为 `long-horizon-presenter`）的生成工具使用 POSIX shell 与
+`start.ps1` 可以原生启动 WebUI，但 sn-ppt-web（内部实现为 `long-horizon-presenter`）的生成工具使用 POSIX shell 与
 Unix 文件锁。需要完整生成能力时请使用 Docker Desktop 或 WSL2，不建议裸 Windows Python。
 当前 Windows 相关方式尚未完成与 macOS 同等强度的全链路回归，请先运行 Smoke Case。
 
@@ -176,6 +178,7 @@ SENSENOVA_MODEL_DISPLAY_NAME=My multimodal model
 如需图片生成与联网搜索，再填写：
 
 ```dotenv
+SENSENOVA_IMAGE_PROVIDER=openai_images
 SENSENOVA_IMAGE_BASE_URL=https://image.example/v1
 SENSENOVA_IMAGE_MODEL=gpt-image-2-adobe-2
 SENSENOVA_IMAGE_API_KEY=replace-me
@@ -184,8 +187,12 @@ SENSENOVA_SEARCH_BASE_URL=https://google.serper.dev
 SENSENOVA_SEARCH_API_KEY=replace-me
 ```
 
-上述示例对应目前的实际验证组合：`gpt-image-2-adobe-2` + Serper 兼容搜索接口。替换为其他
-兼容服务时请自行做连通性与生成质量验证。
+默认生图 Provider 为 `openai_images`。也可以配置 `SENSENOVA_IMAGE_PROVIDER=sensenova_u1`，
+通过 SenseNova 原生 `POST /images/generations` 接入 U1；推荐模型名为 `sensenova-u1-fast`。
+上述 OpenAI Images 示例对应目前的实际验证组合：`gpt-image-2-adobe-2` + Serper 兼容搜索接口。
+SenseNova U1 适配使用其 1K 尺寸桶并解析 `data[].url`；同时兼容图片 URL、data URL/base64、
+`message.images` 和多模态 content block 等常见网关返回；
+替换为其他兼容服务时请自行做连通性与生成质量验证。
 
 所有配置项及优先级见 [配置手册](docs/CONFIGURATION.md)。
 
@@ -194,7 +201,7 @@ SENSENOVA_SEARCH_API_KEY=replace-me
 ```bash
 cd /path/to/SenseNovaPresent-WebUI-...
 chmod +x start.sh
-./start.sh
+./start.sh --language zh
 ```
 
 首次运行会：
@@ -215,7 +222,7 @@ chmod +x start.sh
 局域网访问：
 
 ```bash
-./start.sh --host 0.0.0.0 --port 8001
+./start.sh --language zh --host 0.0.0.0 --port 8001
 ```
 
 ### 3.3 Windows Docker Desktop
@@ -224,6 +231,7 @@ PowerShell 中执行：
 
 ```powershell
 Copy-Item .env.example .env
+$env:STUDIO_LANGUAGE = "zh"
 docker compose up --build -d
 docker compose logs -f sensenova-present
 ```
@@ -242,7 +250,7 @@ docker compose down
 .\start.ps1 -Language zh -HostAddress 127.0.0.1 -Port 8001
 ```
 
-也可以双击 `start.bat`。完整生成请切换到 Docker Desktop 或 WSL2。
+也可以运行 `start.bat -Language zh`。完整生成请切换到 Docker Desktop 或 WSL2。
 
 ## 4. 启动参数
 
@@ -329,7 +337,7 @@ curl http://127.0.0.1:8001/healthz
 然后创建一个 2–3 页 Smoke Case，确认：
 
 - 首页只显示静态演示；
-- Skill 在界面显示为 mural-presenter，内部键为 `long-horizon-presenter`；
+- Skill 在界面显示为 sn-ppt-web，内部 WebUI 键为 `long-horizon-presenter`；Harness 根据 query 语言读取 `sn-ppt-web-zh` 或 `sn-ppt-web-en`；
 - 生成过程可见；
 - 页面预览、播放、讲稿和导出可用；
 - 导出包含 `present.html` 及所需资源。

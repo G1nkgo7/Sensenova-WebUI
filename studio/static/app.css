@@ -1033,6 +1033,12 @@ a:hover { text-decoration: underline; }
   background: rgba(255,255,255,.985); box-shadow: 0 18px 48px rgba(34,25,54,.17), 0 2px 8px rgba(34,25,54,.05);
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: user-menu-in .16s ease both;
 }
+.font-panel.font-panel-floating {
+  position: fixed; right: auto; bottom: auto; z-index: 1200;
+  width: min(430px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px); overflow-x: hidden; overflow-y: auto;
+  box-sizing: border-box;
+}
 .font-panel-head { display:flex; flex-direction:column; gap:2px; margin:0 2px 10px; }
 .font-panel-head strong { color:#302b38; font-size:13px; }
 .font-panel-head small { color:var(--muted); font-size:10.5px; line-height:1.45; }
@@ -1052,16 +1058,26 @@ html[data-theme="dark"] .font-panel-head strong, html[data-theme="dark"] .font-r
 html[data-theme="dark"] .font-role-grid label { background:rgba(140,104,255,.09); }
 .user-menu .user-menu-font-control { width: 100%; }
 .user-menu .user-menu-font-control #font-trigger {
-  width: 100%; min-height: 36px; justify-content: flex-start; gap: 10px; padding: 7px 9px;
+  width: 100%; min-width: 0; min-height: 36px;
+  display: grid; grid-template-columns: 18px minmax(0, 1fr) auto 14px;
+  align-items: center; column-gap: 8px; padding: 7px 9px;
   border-radius: 9px; color: #302b38; font: 520 13px var(--sans); text-align: left;
 }
+.user-menu .user-menu-font-control #font-trigger .font-trigger-label {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .user-menu .user-menu-font-control #font-trigger em {
-  max-width: 76px; margin-left: auto; color: #8f8997; font-size: 10.5px; text-align: right;
+  min-width: 0; max-width: 68px; margin-left: 0; overflow: hidden;
+  color: #8f8997; font-size: 10.5px; line-height: 1.2; text-align: right;
+  text-overflow: ellipsis; white-space: nowrap;
 }
 .user-menu .user-menu-font-control #font-trigger:hover,
 .user-menu .user-menu-font-control #font-trigger.active { color: var(--acc-deep); background: rgba(91,41,218,.07); }
-.user-menu .user-menu-font-control .font-chevron { transform: rotate(0deg); }
-.user-menu .user-menu-font-control #font-trigger.active .font-chevron { transform: rotate(-180deg); }
+.user-menu .user-menu-font-control .font-chevron {
+  width: 14px; margin-left: 0; justify-self: end; line-height: 1;
+  transform: rotate(0deg); transform-origin: center;
+}
+.user-menu .user-menu-font-control #font-trigger.active .font-chevron { transform: rotate(0deg); }
 .user-menu .user-menu-font-control .font-panel {
   left: calc(100% + 12px); bottom: 0; width: min(430px, calc(100vw - 286px));
 }
@@ -2434,12 +2450,14 @@ html[data-theme="dark"] .user-menu .user-menu-font-control #font-trigger.active 
 .service-config-fields label { display: grid; gap: 6px; color: var(--fg); font-size: 11.5px; font-weight: 650; }
 .service-config-fields label > span:first-child { display: flex; justify-content: space-between; gap: 8px; }
 .service-config-fields label em { color: var(--muted); font-style: normal; font-weight: 480; }
-.service-config-fields input:not([type="checkbox"]) {
+.service-config-fields input:not([type="checkbox"]),
+.service-config-fields select {
   min-width: 0; width: 100%; height: 41px; padding: 0 11px; color: var(--fg);
   background: rgba(248,247,251,.94); border: 1px solid var(--hairline); border-radius: 10px;
   outline: none; font: 12.5px var(--sans); transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
 }
-.service-config-fields input:not([type="checkbox"]):focus {
+.service-config-fields input:not([type="checkbox"]):focus,
+.service-config-fields select:focus {
   border-color: rgba(91,41,218,.58); background: var(--surface); box-shadow: 0 0 0 4px rgba(91,41,218,.09);
 }
 .service-field-wide { grid-column: 1 / -1; }
@@ -2949,8 +2967,10 @@ html[data-theme="dark"] .service-dialog {
 html[data-theme="dark"] .service-config-card { background: linear-gradient(115deg, rgba(140,104,255,.055), rgba(24,205,160,.025)); border-color: rgba(255,255,255,.09); }
 html[data-theme="dark"] .service-config-card.is-enabled { border-color: rgba(140,104,255,.24); }
 html[data-theme="dark"] .service-reset:hover { color: #c8b9ff; background: rgba(140,104,255,.1); }
-html[data-theme="dark"] .service-config-fields input:not([type="checkbox"]) { color: #eeeef1; background: #303137; border-color: rgba(255,255,255,.12); }
-html[data-theme="dark"] .service-config-fields input:not([type="checkbox"]):focus { background: #35363c; border-color: rgba(156,126,255,.58); }
+html[data-theme="dark"] .service-config-fields input:not([type="checkbox"]),
+html[data-theme="dark"] .service-config-fields select { color: #eeeef1; background: #303137; border-color: rgba(255,255,255,.12); }
+html[data-theme="dark"] .service-config-fields input:not([type="checkbox"]):focus,
+html[data-theme="dark"] .service-config-fields select:focus { background: #35363c; border-color: rgba(156,126,255,.58); }
 html[data-theme="dark"] .model-dialog-close,
 html[data-theme="dark"] .custom-model-item { background: rgba(255,255,255,.045); }
 html[data-theme="dark"] #model-form input { color: #eeeef1; background: #303137; border-color: rgba(255,255,255,.12); }

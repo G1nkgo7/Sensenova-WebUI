@@ -25,12 +25,14 @@ Shell 变量插值，因此不要写 `${HOME}`，请填写完整路径。
 | `STUDIO_MAX_PER_MODEL` | `0` | `0` 表示不按模型限制并发 |
 | `STUDENT_TEMPERATURE` | `0.3` | 静态生成温度 |
 
-## mural-presenter（内部实现：long-horizon-presenter）
+## sn-ppt-web（内部实现：long-horizon-presenter Harness + 双语冻结 Skill）
+
+前端始终只展示一个 `sn-ppt-web`。Harness 根据本轮 query 的主要语言自动选择：中文使用 `sn-ppt-web-zh`，英文使用 `sn-ppt-web-en`。任务快照会记录实际使用的 Skill 名称、语言和目录哈希。
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `PPTAGENT_PUBLIC_SKILL_KEYS` | `long-horizon-presenter` | 公共 Skill 内部键，前端显示为 mural-presenter |
-| `PPTAGENT_DEFAULT_SKILL` | `long-horizon-presenter` | 默认 Skill 内部键，前端显示为 mural-presenter |
+| `PPTAGENT_PUBLIC_SKILL_KEYS` | `long-horizon-presenter` | 公共 Skill 内部键，前端显示为 sn-ppt-web |
+| `PPTAGENT_DEFAULT_SKILL` | `long-horizon-presenter` | 默认 Skill 内部键，前端显示为 sn-ppt-web |
 | `PPTAGENT_LONG_HORIZON_PRESENTER_SUITE_ROOT` | 自动发现 | 同时包含 `skills/` 与 `harnesses/` 的目录 |
 | `PPTAGENT_LONG_HORIZON_PRESENTER_SKILL_ROOT` | Suite 下默认位置 | 单独覆盖 Skill |
 | `PPTAGENT_LONG_HORIZON_PRESENTER_HARNESS_ROOT` | Suite 下默认位置 | 单独覆盖 Harness |
@@ -63,9 +65,10 @@ chmod 600 .env
 
 ## 生图服务
 
-需兼容 OpenAI Images API：
+支持两种 Provider。默认 `openai_images`，兼容 OpenAI Images API：
 
 ```dotenv
+SENSENOVA_IMAGE_PROVIDER=openai_images
 SENSENOVA_IMAGE_BASE_URL=https://image.example/v1
 SENSENOVA_IMAGE_MODEL=gpt-image-2-adobe-2
 SENSENOVA_IMAGE_API_KEY=replace-me
@@ -87,6 +90,21 @@ SENSENOVA_IMAGE_API_KEY=replace-me
 
 客户端不会强制发送 `response_format`。URL 模式下，运行 WebUI 的机器必须能直接下载该 URL。
 未配置时，Image Agent 仍可使用附件或搜索素材，但无法调用生图服务。
+
+SenseNova U1 使用原生 Images API：
+
+```dotenv
+SENSENOVA_IMAGE_PROVIDER=sensenova_u1
+SENSENOVA_IMAGE_BASE_URL=https://token.sensenova.cn/v1
+SENSENOVA_IMAGE_MODEL=sensenova-u1-fast
+SENSENOVA_IMAGE_API_KEY=replace-me
+```
+
+Harness 会调用 `POST {SENSENOVA_IMAGE_BASE_URL}/images/generations`，发送 `model`、`prompt`、
+U1 支持的固定尺寸桶、`response_format=url` 与 `output_format=png`。推荐模型名为
+`sensenova-u1-fast`，也可按账号实际开放型号修改。标准返回为 `data[].url`；客户端也兼容
+图片 URL、data URL/base64、`message.images` 和多模态 content block。若填写的是完整
+`/images/generations` 地址，Harness 不会重复拼接路径。
 
 ## 搜索服务
 
@@ -120,7 +138,7 @@ SENSENOVA_KIMI_K3_API_KEY=replace-me
 | `PPT_SKILL_BROWSER_EXE` | 显式指定 Chromium / chrome-headless-shell |
 | `STUDIO_DATA_DIR` | 用户授权上传的字体配置与生成资产也写入这里 |
 
-发布包不会附带商业字体。mural-presenter（`long-horizon-presenter`）会按用户配置和系统字体进行匹配，并在交付阶段
+发布包不会附带商业字体。sn-ppt-web（`long-horizon-presenter`）会按用户配置和系统字体进行匹配，并在交付阶段
 按实际使用情况打包允许嵌入的字体资源。
 
 ## 数据目录建议

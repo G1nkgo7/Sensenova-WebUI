@@ -518,7 +518,8 @@ async def _process(deck_id):
     # (teammate-B deploy 2026-06-29)
     _DROP = ("VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT",
              "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL",
-             "OPENAI_API_KEY", "OPENAI_BASE_URL", "IMAGE_API_KEY", "IMAGE_MODEL",
+             "OPENAI_API_KEY", "OPENAI_BASE_URL", "IMAGE_API_KEY", "IMAGE_BASE_URL",
+             "IMAGE_MODEL", "IMAGE_PROVIDER",
              "SERPER_API_KEY", "SERPER_BASE_URL",
              # Limits are account-scoped.  Never inherit another launcher or
              # user's process-level values when 0 means Harness default.
