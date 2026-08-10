@@ -86,6 +86,10 @@ present.html
 
 Read `fonts.md` only when default role selection is insufficient or the occasion is font-sensitive. Do not scan every design, style, layout, and font document before work begins.
 
+Regardless of whether `fonts.md` is opened, Chinese eyebrows, department names, footers, sources, and metadata must use `--font-sans` or `--font-serif` with `0–0.03em` tracking. Reserve `--font-mono`, `--tracking-caps`, and `.is-latin-label` for genuinely Latin technical labels, code, coordinates, and identifiers.
+
+Keep every Chinese title, conclusion, button, or short label in one font family. Emphasize words with color, weight, size, or an underline—not by switching a few characters to a cartoon, handwritten, or second display family. Playful, rounded, handwritten, and calligraphic CJK fonts are opt-in only for children, comics, crafts, classroom boards, personal journals, or an explicit user request. Mark each intentional use with `.is-expressive-type` or `data-type-intent="expressive"` so deterministic review can distinguish art direction from an accidental fallback.
+
 ### 1.6 Visual medium priority
 
 1. Real people, places, products, and events: real photography.
@@ -95,6 +99,8 @@ Read `fonts.md` only when default role selection is insufficient or the occasion
 5. SVG: icons, logos, arrows, markers, and small decoration only.
 
 Do not use hand-authored SVG as the default half-page or full-page main visual unless the user explicitly requires vector delivery or provides an exact vector asset.
+
+When a named film, animation, game, artwork, or identifiable character carries recognition, character, shot-analysis, or evidence duties, retrieve official stills, posters, character sheets, production material, or credible editorial imagery first. Use generation for atmosphere, emotion, transitions, and non-evidentiary concepts. Copyright/IP alone is not a reason to omit imagery, but do not keep paraphrasing a request after the provider explicitly rejects it.
 
 ## 2. New deck workflow
 
@@ -158,6 +164,8 @@ Style Lock defines visual language and decision boundaries, not a fixed HTML tem
 
 Perform a subject-first image-opportunity scan before choosing implementation. Named real people, products, works, interfaces, places, and events usually create real-image opportunities. Do not replace identifiable real subjects with anonymous generated lookalikes. Generated imagery is appropriate for atmosphere, visions, fictional characters, unbuilt spaces, and conceptual scenes; accurate facts and labels remain in HTML or charts.
 
+When image search or generation is available, an all-`none` deck—or a deck with only one cover image—is an exception that requires evidence, not the default safe route. Data, business, technical, academic, and code-heavy topics may keep factual slides in charts or Canvas, but should still choose at least two image-worthy moments among the cover, chapter transitions, cases, scenarios, vision, or conclusion and provide executable asset briefs; a short deck still needs at least one content moment beyond the cover. An image-free deck is allowed only when the user explicitly requests pure typography/charts or when every slide explains why a bitmap would reduce accuracy or readability, with those reasons recorded in `plan/deck.md`. This is a minimum guard against false negatives, not a decorative quota; separate factual real imagery from non-evidentiary generated atmosphere.
+
 Every normal content slide needs one substantial primary visual carrier: a real/generated image, chart, explanatory Canvas, or intentionally composed typographic visual. Borders, empty panels, tiny icons, and decorative lines are not primary visual carriers. Backgrounds should form one coherent family rather than either a random reskin or a uniform flat-color fallback.
 
 Continue only through this dependency chain:
@@ -189,8 +197,8 @@ Planning freezes only when facts, sequence, exact visible copy, media, image opp
 
 ### Phase 4 — Assets and page production
 
-1. Aggregate all real/generated image briefs and delegate coherent Image groups. Every goal includes stable `group_id`, response language, and delivery language.
-2. Register must-show or reusable attachment images first. Bind each candidate to a stable `asset_id`, make an asset contact sheet, inspect the group once with Vision, and write back `ready` or `needs_review`. Only ready catalog assets may enter page plans. A `subject-only` asset requires a verified real alpha cutout; CSS masks and blend modes are not substitutes.
+1. Aggregate all real/generated image briefs and delegate coherent Image groups. Every goal includes stable `group_id`, response language, delivery language, asset purposes, preferred source/fallback order, and plan paths. Do not paste a batch of generation prompts into the goal or turn a frozen real-image-first route into “generate everything.”
+2. Register must-show or reusable attachment images first. Bind each candidate to a stable `asset_id`, make an asset contact sheet, inspect the group once with Vision, and write back the decision. A `subject-only` asset requires a verified real alpha cutout; CSS masks and blend modes are not substitutes. Retry an explicitly non-retryable generation rejection with one materially safer prompt at most, then switch to real retrieval or the planned non-bitmap fallback. When the tool asks for local-candidate inspection, complete the contact sheet and catalog decision before any more acquisition. If an asset remains unavailable, update the affected page plan to a viable fallback instead of redelegating the same image task. Before Slide starts, every image need has either a real local path or an explicit non-bitmap replacement in the frozen plan.
 3. Delegate one Slide agent per frozen Production group. The first goal line must be exactly `Slide Group <group_id> [NN,NN]:`. Include languages and `boundary_handoff`. Do not split a frozen multi-page group merely to increase concurrency.
 4. Within each group, complete pages sequentially: full first draft -> render one page -> inspect the PNG with Vision -> merge fixes -> rerender and re-inspect. A page must be ready before the next begins. Usually use 0–2 refine rounds; a third round is a soft stop line and may address only a visible hard defect with a more stable structure.
 5. After every group finishes and reviews its final group contact sheet, delegate the single Review agent.

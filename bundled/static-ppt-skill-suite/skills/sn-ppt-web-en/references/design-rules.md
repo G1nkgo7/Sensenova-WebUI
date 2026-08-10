@@ -43,6 +43,9 @@ Validate the final crop in the PNG. Never place essential text over a face, prod
 ## 2 · Typography
 
 - Assign explicit roles: display, title, body, caption, numeric, and optional monospace.
+- Keep each Chinese sentence, title, conclusion, button, and label in one family. Emphasis changes color, weight, size, or decoration rather than switching a few glyphs to another family.
+- Playful, rounded, handwritten, and calligraphic CJK type is opt-in only when the topic and audience support it. Mark intentional uses with `.is-expressive-type` or `data-type-intent="expressive"`; otherwise use a registered Noto Sans/Serif SC role.
+- Chinese eyebrows, departments, sources, footers, and metadata use sans/serif with near-normal tracking. Reserve mono and wide all-caps tracking for genuinely Latin technical content.
 - Keep content-page title position, family, and size stable across the deck.
 - Use `clamp()` or length-aware size tiers for long titles.
 - Chinese heavy display type should not use negative tracking.

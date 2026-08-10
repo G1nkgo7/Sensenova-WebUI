@@ -40,6 +40,7 @@ Use this checklist after every render and again before delivery. Automated lint 
 ### Technical checks
 
 - The page renders at the required canvas size with no console error.
+- `render.py` reports zero `CJK-TYPE` defects: no mixed-family Chinese sentence, accidental mono/wide tracking, or unmarked novelty CJK font.
 - All local assets resolve and no external placeholder URL remains.
 - The rendered PNG is fresh and corresponds to the current HTML.
 - Browser-only effects degrade safely in headless Chromium.

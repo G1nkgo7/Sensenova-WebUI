@@ -912,6 +912,63 @@ _CONTRAST_JS = r"""
 })()
 """
 
+_CJK_TYPOGRAPHY_JS = r"""
+(() => {
+  const issues=[];
+  const cjk=/[\u3400-\u9fff\uf900-\ufaff]/;
+  const mono=/(?:ibm\s*plex\s*mono|\bmono\b|monospace|consolas|courier)/i;
+  const expressive=/(?:smiley\s*sans|zcool\s*kuai\s*le|zcool\s*qingke\s*huangyou|xiaolai|ma\s*shan\s*zheng|zhi\s*mang\s*xing|liu\s*jian\s*mao\s*cao|long\s*cang|ruanmeng|软萌|行书|草书)/i;
+  const visible=(el,cs) => {
+    const r=el.getBoundingClientRect();
+    return cs.display!=='none' && cs.visibility!=='hidden' && Number(cs.opacity||1)>0.01 && r.width>1 && r.height>1;
+  };
+  const family=(cs) => (cs.fontFamily||'').split(',')[0].replace(/["']/g,'').trim().toLowerCase();
+  const declared=(el) => !!el.closest('.is-expressive-type,[data-type-intent="expressive"]');
+  const push=(el,text,cs,kinds,extra={}) => {
+    if(!kinds.length) return;
+    issues.push({
+      text:text.slice(0,48), cls:(''+((el.className&&(el.className.baseVal??el.className))||'')).slice(0,48),
+      font:(cs.fontFamily||'').slice(0,96), letterSpacing:Math.round((parseFloat(cs.letterSpacing)||0)*10)/10,
+      fontSize:Math.round((parseFloat(cs.fontSize)||16)*10)/10, kinds, ...extra
+    });
+  };
+  for(const el of document.querySelectorAll('.slide *')){
+    const direct=[...el.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent||'').join(' ').trim();
+    if(!direct || !cjk.test(direct)) continue;
+    const cs=getComputedStyle(el); if(!visible(el,cs)) continue;
+    const fs=parseFloat(cs.fontSize)||16;
+    const ls=cs.letterSpacing==='normal' ? 0 : (parseFloat(cs.letterSpacing)||0);
+    const kinds=[];
+    if(mono.test(cs.fontFamily||'')) kinds.push('cjk-in-mono');
+    if(ls > fs*0.08+0.2) kinds.push('cjk-tracking-too-wide');
+    if(expressive.test(cs.fontFamily||'') && !declared(el)) kinds.push('expressive-cjk-without-intent');
+    push(el,direct,cs,kinds);
+  }
+  for(const el of document.querySelectorAll('.slide h1,.slide h2,.slide h3,.slide h4,.slide h5,.slide h6,.slide p,.slide blockquote,.slide .slide-title,.slide .sec-name,.slide .headline,.slide .title,.slide .subtitle,.slide .kicker')){
+    const cs=getComputedStyle(el); if(!visible(el,cs)) continue;
+    const runs=[];
+    for(const node of el.childNodes){
+      if(node.nodeType===3){
+        const text=(node.textContent||'').trim();
+        if(cjk.test(text)) runs.push({text, family:family(cs)});
+      }else if(node.nodeType===1){
+        const child=node;
+        const childStyle=getComputedStyle(child);
+        if(!['inline','inline-block','contents'].includes(childStyle.display)) continue;
+        const text=(child.textContent||'').trim();
+        if(cjk.test(text)) runs.push({text, family:family(childStyle)});
+      }
+    }
+    const text=runs.map(r=>r.text).join('');
+    const families=[...new Set(runs.map(r=>r.family).filter(Boolean))];
+    if(runs.length>1 && text.length<=80 && families.length>1){
+      push(el,text,cs,['mixed-cjk-family'],{families:families.slice(0,4)});
+    }
+  }
+  return issues.slice(0,20);
+})()
+"""
+
 
 def _setup_libs():
     """把本地依赖库目录加进 LD_LIBRARY_PATH —— 在 chromium 子进程启动前设置即可生效。"""
@@ -934,6 +991,7 @@ def _setup_libs():
 def _render_once(p, html, out, w, h, browser_exe=None, browser=None):
     """渲染一次；可传共享 browser 供 batch 调用。返回版式诊断字典。"""
     rep = {"broken": [], "overflow": [], "overlap": [], "crowded": [], "vbalance": None,
+           "cjkTypography": [],
            "layout": {}, "runtime": {"script_failed": [], "page_errors": [], "charts_missing": []}}
     owns_browser = browser is None
     if owns_browser:
@@ -1121,6 +1179,10 @@ def _render_once(p, html, out, w, h, browser_exe=None, browser=None):
                 rep["contrast"] = pg.evaluate(_CONTRAST_JS)
             except Exception:
                 pass
+            try:
+                rep["cjkTypography"] = pg.evaluate(_CJK_TYPOGRAPHY_JS) or []
+            except Exception:
+                rep["cjkTypography"] = []
             pg.screenshot(path=out)
         finally:
             pg.close()
@@ -1148,6 +1210,7 @@ def _batch_warning_summary(report):
                    for key in ("customBody", "abs", "decor", "footer", "svgLarge")})
     counts["contrast"] = len((report.get("contrast") or {}).get("low") or [])
     counts["onimg"] = len((report.get("contrast") or {}).get("onimg") or [])
+    counts["cjkTypography"] = len(report.get("cjkTypography") or [])
     runtime = report.get("runtime") or {}
     counts["script_failed"] = len(runtime.get("script_failed") or [])
     counts["page_errors"] = len(runtime.get("page_errors") or [])
@@ -1157,7 +1220,7 @@ def _batch_warning_summary(report):
 
 
 _HARD_RENDER_KEYS = (
-    "broken", "overflow", "crowded",
+    "broken", "overflow", "crowded", "cjkTypography",
 )
 
 # ``boxoverflow`` is intentionally advisory.  It compares child and parent
@@ -1691,6 +1754,12 @@ def main():
                           "或 `paint-order:stroke` 描边(别整图压暗、保住氛围):" % len(coni))
                     for e in coni:
                         print("   · 「%s」<%s> 字号 %spx" % (e.get("txt"), e.get("cls"), e.get("fs")))
+                cjk_typography = rep.get("cjkTypography") or []
+                if cjk_typography:
+                    print("⚠ CJK-TYPE: %d Chinese typography defect(s). Keep each Chinese sentence in one family; emphasize with color, weight, or size. Do not apply mono or wide Latin tracking to Chinese. Playful or handwritten CJK requires a justified `.is-expressive-type` marker:" % len(cjk_typography))
+                    for e in cjk_typography:
+                        print("   · 「%s」<%s> %s, letter-spacing=%spx"
+                              % (e.get("text"), e.get("cls"), "/".join(e.get("kinds") or []), e.get("letterSpacing")))
                 workspace = _workspace_from_render_paths(html, out)
                 number = _batch_page_number(html)
                 if workspace is not None and number is not None:

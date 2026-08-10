@@ -23,6 +23,10 @@ Always include a generic fallback at the end of a stack. A family name alone doe
 - Activate role tokens explicitly in `base.css`; do not rely on browser defaults.
 - Use at most two primary families plus an optional mono family.
 - Match font personality to the occasion: serif for editorial, cultural, or reflective work; sans for technology, business, teaching, and dense data; mono only for controlled technical accents.
+- Keep a Chinese sentence, title, conclusion, button, or label in one family. Local emphasis changes color, weight, size, or decoration—not the font family.
+- Treat playful, rounded, handwritten, and calligraphic CJK fonts as explicit opt-ins. Use them only when the subject and audience justify that voice, and mark the element with `.is-expressive-type` or `data-type-intent="expressive"`.
+- Use Noto Sans SC or Noto Serif SC for informational Chinese headings and as the delivery fallback. Do not use a Latin display face, mono face, or novelty CJK face as an implicit fallback for Chinese glyphs.
+- Chinese eyebrows, departments, sources, footers, and metadata use sans/serif tracking near `0–0.03em`; Latin all-caps tracking and mono typography do not apply to Chinese labels.
 - Keep Chinese and Latin weight visually balanced. Avoid thin CJK weights on projection screens.
 - Do not simulate bold or italic when the selected face lacks the required style.
 - Verify uncommon names, symbols, and multilingual glyphs in final PNG pixels.
