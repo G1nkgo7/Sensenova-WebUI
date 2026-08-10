@@ -324,6 +324,20 @@ def terminal(agent, command, background=False, timeout=None, workdir=None,
         return ("terminal 拒绝:渲染环境(playwright/chromium/字体)已预装且可用,禁止安装/重装/调试它。"
                 "render.py 报错的真实原因几乎都是你的 HTML/CSS 不合法或资源没加载——请重试一次,"
                 "仍失败就简化/修正 HTML,绝不要 pip install / playwright install。")
+    # 根目录递归扫描既不是可复现的依赖发现方式，也会在 macOS/容器挂载盘上
+    # 长时间占满 CPU。字体与浏览器位置必须来自安装脚本、环境变量或系统字体索引，
+    # 不能让模型通过 `find /` 猜运行环境。
+    _root_scan = re.compile(
+        r"(?i)(?:^|[;&|]\s*|\bsudo\s+)"
+        r"(?:find\s+(?:/|['\"]/[\"'])|du\s+(?:/|['\"]/[\"'])|ls\s+-R\s+(?:/|['\"]/[\"']))"
+        r"(?:\s|$)"
+    )
+    if _root_scan.search(command):
+        return (
+            "terminal 拒绝:禁止递归扫描文件系统根目录。"
+            "字体请使用 PPT_FONT_SOURCE_DIRS、fc-match/fc-list 或 Skill 已安装的 fonts 目录；"
+            "浏览器与 Python 请使用 Harness 已注入的环境变量。不得改写为另一种全盘搜索。"
+        )
     quality_command = "deck.py build" in _norm or "render.py" in _norm
     if quality_command and re.search(r"(?:\||;|&&|\|&)\s*(?:tail|head)\b", _norm):
         return (

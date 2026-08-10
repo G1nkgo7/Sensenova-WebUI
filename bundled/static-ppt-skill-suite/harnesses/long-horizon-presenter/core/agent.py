@@ -1015,6 +1015,7 @@ def run_loop(agent):
             break
 
         _tool_content = _run_tools(agent, tool_uses, turn, tool_log)
+        terminal_contract_failure = _blocking_review_failure(agent)
         blocked_no_progress = sum(
             1
             for result in (_tool_content or [])
@@ -1053,7 +1054,16 @@ def run_loop(agent):
         )
         role_can_finalize = bool(finalization_role)
         stop_after_results = False
-        if stalled and role_can_finalize and not finalization_only:
+        if terminal_contract_failure:
+            stop_after_results = True
+            agent._terminal_contract_failure = terminal_contract_failure
+            agent.log(
+                "唯一 Review 已返回 "
+                f"{terminal_contract_failure['status']}；停止 Orchestrator 后续工具调用。"
+                "Review 内部允许的修复与复核轮次已经结束，主编排器不得绕过质量门继续修改、"
+                "build 或探测运行环境。"
+            )
+        elif stalled and role_can_finalize and not finalization_only:
             agent._finalization_only = True
             agent._finalization_role = finalization_role
             if finalization_role in {"review", "slide"}:
@@ -1110,11 +1120,14 @@ def run_loop(agent):
         if compacted:
             agent.log(f"[上下文维护] 已压缩早期普通文本/工具结果约 {compacted} 字符；原始 Trace 未改变")
         if stop_after_results:
-            agent.exit_reason = "stalled_repetition"
-            agent.log(
-                "停滞保护触发：相同工具路线或未变化像素被重复请求；"
-                "停止当前子任务，保留已有产物并避免继续膨胀上下文。"
-            )
+            if terminal_contract_failure:
+                agent.exit_reason = "review_blocked"
+            else:
+                agent.exit_reason = "stalled_repetition"
+                agent.log(
+                    "停滞保护触发：相同工具路线或未变化像素被重复请求；"
+                    "停止当前子任务，保留已有产物并避免继续膨胀上下文。"
+                )
             break
     else:
         agent.exit_reason = "max_turns"
@@ -1929,6 +1942,49 @@ def _child_contract_error(parent, child, kind, contract):
     if forced and status != forced:
         return f"停滞收口后的 {kind} 只能返回 status: {forced}，不得返回 {status or 'missing'}"
     return ""
+
+
+def _blocking_review_failure(parent):
+    """Return the terminal failure from the task-level singleton Review.
+
+    Review owns its bounded diagnose -> repair -> recheck loop.  Once that
+    worker returns blocked/unclean, the orchestrator may not keep editing,
+    rerendering, rebuilding, or probing the runtime: those actions would make
+    the recorded Review evidence stale while acceptance still (correctly)
+    rejects the singleton Review contract.
+    """
+    if str(getattr(parent, "role", "") or "").lower() != "orchestrator":
+        return None
+    lock = getattr(parent, "_spawn_lock", None)
+    if lock is None:
+        records = list(getattr(parent, "worker_recs", []) or [])
+    else:
+        with lock:
+            records = list(getattr(parent, "worker_recs", []) or [])
+    reviews = [
+        record for record in records
+        if str(record.get("kind") or "").lower() == "review"
+        or "review" in str(record.get("label") or "").lower()
+    ]
+    if not reviews:
+        return None
+    review = reviews[-1]
+    contract = review.get("contract") or {}
+    status = str(contract.get("status") or "missing").strip().lower()
+    if review.get("clean") and status == "ready":
+        return None
+    detail = str(
+        contract.get("remaining")
+        or contract.get("validation_error")
+        or contract.get("summary")
+        or review.get("exit_reason")
+        or "Review 未通过最终质量门"
+    ).strip()
+    return {
+        "label": str(review.get("label") or "review"),
+        "status": status,
+        "detail": detail,
+    }
 
 
 def _run_child(parent, task, ticket):
