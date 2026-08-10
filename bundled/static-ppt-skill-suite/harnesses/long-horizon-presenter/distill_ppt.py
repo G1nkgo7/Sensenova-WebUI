@@ -971,7 +971,14 @@ def _pixel_review_acceptance(
     review = reviews[0]
     contract = review.get("contract") or {}
     if not review.get("clean") or contract.get("status") != "ready":
-        return False, "最终 Review 未自然返回 ready"
+        status = str(contract.get("status") or "missing")
+        detail = str(
+            contract.get("remaining")
+            or contract.get("validation_error")
+            or review.get("exit_reason")
+            or "未提供具体原因"
+        )
+        return False, f"最终 Review 返回 {status}，未通过质量门：{detail}"
     if int(review.get("vision_calls") or 0) < 1:
         return False, "最终 Review 未实际调用 vision_analyze"
     expected_mode = "simple_edit" if allow_review_only and not slide_workers else "final_review"
@@ -1033,6 +1040,11 @@ def _accept(
     allow_non_text_exit=False,
 ):
     """结构化拒绝采样 —— 只有干净轨迹才提交。返回 (ok, 原因)。"""
+    if orch.exit_reason == "review_blocked":
+        failure = getattr(orch, "_terminal_contract_failure", None) or {}
+        status = str(failure.get("status") or "blocked")
+        detail = str(failure.get("detail") or "Review 未通过最终质量门")
+        return False, f"最终 Review 返回 {status}，任务已停止：{detail}"
     if orch.exit_reason != "text_response" and not allow_non_text_exit:
         return False, f"编排器未自然收尾(exit={orch.exit_reason})"
     slides = _slide_htmls(orch.ws)
