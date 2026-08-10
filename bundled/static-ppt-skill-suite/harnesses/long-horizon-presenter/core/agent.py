@@ -381,7 +381,13 @@ class Agent:
             "authoritative_task_started_at": time.strftime(
                 "%Y-%m-%d %H:%M:%S UTC", time.gmtime(self.task_started_epoch)
             ),
-            "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            # Persist an absolute instant.  The old value used the host's local
+            # wall clock without an offset, so consumers on macOS/UTC hosts
+            # could interpret the same run eight hours apart and clamp a real
+            # Agent duration to zero.
+            "started_at": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.started)
+            ),
             "tools": tool_names,
             "vision_available": "vision_analyze" in tool_names,
         }

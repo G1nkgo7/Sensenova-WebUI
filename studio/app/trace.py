@@ -479,7 +479,11 @@ def _trace_timestamp(value):
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        # Historical Harness versions persisted the host-local wall clock
+        # without an offset.  Interpret those values in the same host-local
+        # timezone instead of relabelling them as UTC.  New traces always carry
+        # an explicit trailing Z and do not enter this compatibility branch.
+        return time.mktime(parsed.timetuple()) + parsed.microsecond / 1_000_000
     return parsed.timestamp()
 
 
