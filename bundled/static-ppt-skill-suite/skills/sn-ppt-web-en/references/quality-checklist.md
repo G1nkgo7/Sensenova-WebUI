@@ -85,6 +85,7 @@ Treat these as review candidates rather than automatic failures:
 - `OVERLAP` and `DECOR-OVERLAP`
 - `INNER-GAP`, `WIDOW-LINE`, and `IMG-LONELY`
 - `VBALANCE` and `COVER-OOB`
+- `cjkTypography`, crowdedness, bbox/contrast candidates, mild wrapping, punctuation, and aesthetic preferences
 - transparent bounding-box collisions and intentional layered compositions
 
 Never damage a good composition merely to silence a heuristic. Verify the actual pixels, identify the root cause, and make the smallest correction that improves the audience-facing result.

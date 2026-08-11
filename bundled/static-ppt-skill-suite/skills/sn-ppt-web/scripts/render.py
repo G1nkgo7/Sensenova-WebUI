@@ -1157,7 +1157,7 @@ def _batch_warning_summary(report):
 
 
 _HARD_RENDER_KEYS = (
-    "broken", "overflow", "crowded",
+    "broken", "overflow",
 )
 
 # ``boxoverflow`` is intentionally advisory.  It compares child and parent

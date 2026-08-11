@@ -200,7 +200,7 @@ Planning freezes only when facts, sequence, exact visible copy, media, image opp
 1. Aggregate all real/generated image briefs and delegate coherent Image groups. Every goal includes stable `group_id`, response language, delivery language, asset purposes, preferred source/fallback order, and plan paths. Do not paste a batch of generation prompts into the goal or turn a frozen real-image-first route into “generate everything.”
 2. Register must-show or reusable attachment images first. Bind each candidate to a stable `asset_id`, make an asset contact sheet, inspect the group once with Vision, and write back the decision. A `subject-only` asset requires a verified real alpha cutout; CSS masks and blend modes are not substitutes. Retry an explicitly non-retryable generation rejection with one materially safer prompt at most, then switch to real retrieval or the planned non-bitmap fallback. When the tool asks for local-candidate inspection, complete the contact sheet and catalog decision before any more acquisition. If an asset remains unavailable, update the affected page plan to a viable fallback instead of redelegating the same image task. Before Slide starts, every image need has either a real local path or an explicit non-bitmap replacement in the frozen plan.
 3. Delegate one Slide agent per frozen Production group. The first goal line must be exactly `Slide Group <group_id> [NN,NN]:`. Include languages and `boundary_handoff`. Do not split a frozen multi-page group merely to increase concurrency.
-4. Within each group, complete pages sequentially: full first draft -> render one page -> inspect the PNG with Vision -> merge fixes -> rerender and re-inspect. A page must be ready before the next begins. Usually use 0–2 refine rounds; a third round is a soft stop line and may address only a visible hard defect with a more stable structure.
+4. Within each group, complete pages sequentially: full first draft -> render one page -> inspect the PNG with Vision -> merge all confirmed hard-defect fixes -> rerender and re-inspect. A page must be ready before the next begins. Allow at most one refine round per page. If fresh pixels still show real clipping, overlap, unreadable content, runtime errors, or stale output, return `blocked`; treat `cjkTypography`, crowdedness, bbox/contrast candidates, mild wrapping, punctuation, and aesthetic preferences as advisory unless pixels or DOM evidence prove a real audience-facing defect.
 5. After every group finishes and reviews its final group contact sheet, delegate the single Review agent.
 
 ### Phase 5 — Final Review and delivery
@@ -218,11 +218,11 @@ Review then:
 
 1. Diagnoses the full deck before modifying anything: inspect the overview, every review-contact batch, and required focus pages; freeze one issue ledger.
 2. Verifies content fidelity against grounded knowledge and Material coverage whenever attachments or Research exist.
-3. Performs centralized fixes, rerenders the full affected scope, and inspects fresh focus pixels. One refine round is normal; a second is a soft stop for remaining hard defects only.
+3. Performs one centralized repair pass, rerenders the full affected scope, and inspects fresh focus pixels. Review may use at most one refine round; it must not open a second round or edit merely to silence advisory heuristics.
 4. Resynchronizes the speaker script after pixels are final.
 5. Returns `ready` only after final pixels were actually inspected and build succeeded.
 
-After Review returns ready, the Orchestrator only verifies that delivery files exist. It must not rerender, rebuild, or rediagnose unchanged results. If any page changes after Review, send it back to the same Review agent for revalidation.
+After Review returns ready, the Orchestrator only verifies that delivery files exist. It must not rerender, rebuild, rediagnose unchanged results, or chase advisory typography/geometry/aesthetic hints. If any page changes after Review, send it back to the same Review agent for revalidation.
 
 Build with:
 

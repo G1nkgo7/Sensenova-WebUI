@@ -36,7 +36,7 @@ Review may modify affected page HTML, affected page plans, `base.css` only when 
 
 1. Repair the frozen ledger in one coordinated pass. Preserve good composition while fixing content fidelity, hierarchy, readability, crop, overlap, overflow, contrast, repetition, and deck rhythm.
 2. Rerender the full affected scope, inspect fresh focus pixels, and compare against the previous version.
-3. One refine round is normal. A second is a soft stop and may address only remaining visible hard defects. If a fix does not improve the same defect, change the root-cause hypothesis or restore the best version.
+3. Use at most one refine round: merge every confirmed hard-defect repair, rerender once, and inspect fresh focus pixels. Do not open a second round or edit merely to silence advisory hints. If a real hard defect remains, return `blocked`; if only advisory notes remain, record them and return `ready`.
 4. Synchronize `speech.md` only after pixels are final.
 5. Build and validate:
 
@@ -54,6 +54,8 @@ python ${SKILL_DIR:-skills/sn-ppt-web-en}/scripts/deck.py build . --expected <sl
 - Verify real-image identity, semantic color, protected crop parts, and evidence labels.
 - Internal paths, planning labels, production notes, assumptions, and speaker-only text must not appear on slides.
 - Do not allow a task to loop after delivery artifacts are complete. Soft, non-audience-facing notes should not block an otherwise valid deck.
+- Hard blockers are limited to missing or broken deliverables, actual clipping/overlap/unreadability confirmed by fresh pixels or DOM evidence, runtime or console failures, stale renders, page-count mismatch, and missing `present.html`.
+- `cjkTypography`, crowdedness, bbox/contrast candidates, mild wrapping, punctuation, and aesthetic layout/chart preferences are advisory unless they are proven to cause one of those hard failures.
 
 ## 6. Return contract
 

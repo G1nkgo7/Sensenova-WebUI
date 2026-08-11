@@ -226,7 +226,7 @@ python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py prepare . --expected <总
 1. 汇总所有被判定为真实图或生成图的图片 brief，再启动 Image subagent；每个 goal 显式带上稳定 `group_id`、`response_language` 与 `deliverable_language`。只要计划中存在有效配图机会，就不能静默跳过 Image 阶段；同一视觉配方且能在一张联系表中共同审清的素材归入同一分片，多张生成图在同一工具回合并行提交。
 2. 先把 `attachment_visual_map` 中 must-show / reuse 的图片复制并登记来源，再交给对应 Image 分组；论文命名 Figure 先由 Image 使用 `deck.py material-figure` 从页图生成独立、可追溯的 Figure 裁图，整页 PNG 只作为定位上下文。每个 Image 分组将候选路径绑定到稳定 `asset_id`，由 `deck.py asset-contact` 生成一张带 ID 的素材联系表，默认只做一次整组 Vision；只有被标红、要求抠图、比例可疑或主体完整性无法从缩略图判断的素材才打开单图复核。Image 用 `asset-review` 写回最终状态后，Orchestrator 只按 `ready` 的 `asset_id → actual path + origin + crop_contract` 回填逐页计划；候选、被替换与废弃图片不算正式素材。`assets/catalog.json` 必须保留下载 URL、生成模型、用户附件路径和派生关系。逐页图片先锁定 `presentation: subject-only | framed-scene | full-bleed | evidence-crop`：任何要悬浮、跨色场叠放或作为独立角色/物件的图都属于 `subject-only`，必须由 Image 完成透明检查、主体抠图、最终 Alpha 检查与必要的单图 Vision，再回填可用的 `*-cutout.png`；普通 RGB 图不得作为透明资产返回 `ready`。带背景图片只能作为有意的画框场景、满幅裁切或证据裁图，不能把其白底/奶油底矩形偶然贴到另一种画布上。Slide 不临时去背，也不用 CSS mask/multiply 冒充。映射确有问题时交回同一个 Image 复核。失败素材先换可行的真实图或生成图路线，确实不可得时才改为 Canvas 或排版降级，并写清原因，不留占位。Slide 启动前，所在页组需要的图片路径与裁切合同必须已经确定。
 3. 一个 Production group 委派一个 Slide，可并行执行；goal 的首行必须精确写成 `Slide Group <group_id> [NN,NN]:`，例如 `Slide Group bookends [01,20]:`。页码所有权以已冻结的 `production_group` 为准；不用“负责封面和结尾”、“第一组页面”等叙述取代组 ID 与标准页码头。显式带上 `response_language`、`deliverable_language` 与该组 `boundary_handoff`。不得为了提高并发把已经冻结的多页 group 再拆成“一页一个 Slide”；只有计划本身确实定义为单页组时才单页委派。同组必须同时满足叙事亲缘、设计亲缘和制作负荷相容；复杂 Canvas、独立数据图或重图像合成页在没有真正共享构图系统时应单独成组。Grouping 提供的是共享设计记忆，不是批量降精度：同一个 Slide 按组内页序串行完成每页闭环。
-4. Slide 先读取 Style Lock 与组合同，然后对每一页依次执行“完整首稿 → 单页渲染 → `vision_analyze` → 合并修复 → 重渲复看”；当前页达到 ready 后才进入下一页。全部页面完成后，再批量渲染本组并查看组内全部最终 PNG，修正亲缘性漂移或机械重复。封面、每张章节页、结尾页都必须完成自己的单页闭环。首次看图后的“合并修改 → 重渲 → 复看”记为一轮 refine；通常 0–2 轮，第 3 轮作为软止损并换成更稳定的结构，不继续审美微调。最后一次修改后没有重新渲染和看图，不得返回 ready。
+4. Slide 先读取 Style Lock 与组合同，然后对每一页依次执行“完整首稿 → 单页渲染 → `vision_analyze` → 合并修复 → 重渲复看”；当前页达到 ready 后才进入下一页。全部页面完成后，再批量渲染本组并查看组内全部最终 PNG，修正亲缘性漂移或机械重复。封面、每张章节页、结尾页都必须完成自己的单页闭环。首次看图后的“合并修改 → 重渲 → 复看”记为一轮 refine；每页最多 1 轮，把所有已确认硬伤合并修复。复验后仍有真实裁切、遮挡、不可读或运行错误则 `blocked`；仅有 `cjkTypography`、crowdedness、bbox/contrast 候选、轻微换行、标点或审美偏好时记录为 advisory 并返回 ready。最后一次修改后没有重新渲染和看图，不得返回 ready。
 5. 等待全部页面完成后再启动唯一 Review。新建或复杂编辑过程中不得额外委派 `simple_edit`、`review-fix` 或第二个 Review；某页在 Slide 阶段暴露的问题交回其所属 Slide Group 合并修复，或记入最终 Review 的问题账本。
 
 ### 阶段 5：全册 Review 与交付
@@ -246,9 +246,9 @@ mode=final_review
 2. **内容保真核验：**任务含附件或使用了 Research 时，在像素修改前把每页屏显事实与 `grounded-knowledge.md` 对照；有附件时再对照 Material 摘要及 coverage ledger，并写 `_trace/content-fidelity.md`。数字、名称、日期、单位、产品身份、原话或关系无法追溯、自相矛盾时修正或 blocked。生成图只能承担概念/氛围表达；若用于具名真实产品、人物或案例识别，页面必须明确标“概念示意”，不能作为事实证据。仅当既无附件、又无 Research 和高风险外部事实时，`content_fidelity` 才可为 `not-applicable`。
 3. **集中修复：**唯一 Review 既诊断也直接修复；当前文件与已有素材能解决的问题不得只上报给 Orchestrator。按共同根因先全局、后局部，全部修改结束后才统一批量渲染。这一整批“修改 → 批量渲染 → focus 复验”记为 Review 的 1 轮 refine。任何 HTML/`base.css` 修改都会使旧 PNG 失效，重渲前禁止再次调用 Vision；Canvas/SVG/HTML 叠加页必须同步修正 CSS 尺寸、Canvas 属性、SVG `viewBox`、JS 坐标与节点锚点，不能只放大外容器。机检中的 `boxoverflow`、bbox 相交和装饰相交仅为定位候选；若新鲜像素没有真实遮挡、裁切或不可读，不得为清除告警缩字、压缩主体或删除有构图作用的元素。
 4. 改过 base.css/字体时全册 batch；只改局部时 page batch。
-5. 生成一次 focus 联系表复验。Review 通常只做 1 轮 refine；仍有可见硬伤时，第 2 轮是软止损线，只合并修复残余硬伤，不新增审美目标。再失败则 blocked。
+5. 生成一次 focus 联系表复验。Review 最多只做 1 轮 refine，把所有已确认硬伤合并修复；不得为 advisory 开启修改，也不得开启第二轮。复验后仍有真实硬伤则 `blocked`，仅有 advisory 时记录后返回 `ready`。
 6. 像素定稿后同步讲稿。
-7. Review 返回 `ready` 且已成功 build 后，Orchestrator 只读取其结构化结论并确认交付文件存在；不得再次渲染、build、查看同一 PNG/contact sheet 或重新诊断相同问题。只有 Review 后发生新的页面修改，才回交同一个 Review 复验。
+7. Review 返回 `ready` 且已成功 build 后，Orchestrator 只读取其结构化结论并确认交付文件存在；不得再次渲染、build、查看同一 PNG/contact sheet 或重新诊断相同问题，也不得追逐 `cjkTypography`、crowdedness、bbox/contrast 候选、轻微换行、标点或审美偏好等 advisory。只有 Review 后发生新的页面修改，才回交同一个 Review 复验。
 
 Review 超时、返回 `blocked`、缺少最终像素复验或没有自然返回合同时，整项任务即未通过质量门。Orchestrator 不得跳过 Review 后自行 build、把旧渲染当作成稿或宣告成功。
 

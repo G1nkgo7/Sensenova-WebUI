@@ -38,7 +38,7 @@ Write only assigned `slides/slide_NN.html` and `renders/slide_NN.png`. Do not ch
 python ${SKILL_DIR:-skills/sn-ppt-web-en}/scripts/render.py --batch . --pages NN
 ```
 The first Vision pass must independently describe the first focal point, reading path, visual carrier, text/evidence/whitespace distribution, crop integrity, and any unplanned visual anomaly before reading lint hints. Then compare DOM/computed geometry and structured diagnostics where needed.
-6. List all page issues once, apply one merged correction, rerender, and inspect again. A refine round is one pixel-informed edit plus rerender plus reinspection. Most pages should finish in 0–2 rounds; a third round is a soft stop for visible hard defects only. If two fresh renders do not materially improve the same issue, change structure or return `blocked` rather than tuning more numbers.
+6. List all page issues once, apply one merged correction, rerender, and inspect again. A refine round is one pixel-informed edit plus rerender plus reinspection, and each page may use at most one. If fresh pixels still show a real hard defect, restore the best version and use a simpler stable structure or return `blocked`; do not open a second tuning round. Treat `cjkTypography`, crowdedness, bbox/contrast candidates, mild wrapping, punctuation, and aesthetic preferences as advisory unless fresh pixels or DOM evidence prove real clipping, overlap, unreadability, runtime failure, or wrong meaning.
 7. Keep the successful visual decisions in context and continue to the next page only after the current page is ready.
 8. After all pages are ready, batch-render and inspect the full group for kinship, rhythm, repeated geometry, and abrupt drift:
 

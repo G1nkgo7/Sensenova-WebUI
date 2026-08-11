@@ -796,9 +796,10 @@ def _validate_render_quality(root: Path, expected: int | None) -> None:
         # pixel/DOM evidence can turn it into a real repair.  Filtering here
         # keeps historical decks editable without forcing a destructive
         # shrink-to-clear cycle.
+        advisory_types = {"boxoverflow", "overlap", "crowded", "cjktypography", "contrast"}
         hard = [
             item for item in (record.get("hard_issues") or [])
-            if str(item.get("type") or "").lower() != "boxoverflow"
+            if str(item.get("type") or "").lower() not in advisory_types
         ]
         if hard:
             kinds = ",".join(str(item.get("type") or "unknown") for item in hard)

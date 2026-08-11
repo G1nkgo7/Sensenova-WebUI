@@ -983,9 +983,7 @@ def _pixel_review_acceptance(
     slide_workers = [worker for label, worker in latest.items() if label.startswith("slide")]
     if not slide_workers and not allow_review_only:
         return False, "没有可验收的 Slide 子 Agent"
-    failed_slides = [worker.get("label") for worker in slide_workers if not worker.get("clean")]
-    if failed_slides:
-        return False, f"Slide 子 Agent 未正常完成: {failed_slides[:5]}"
+    failed_slides = [worker for worker in slide_workers if not worker.get("clean")]
     blind_slides = [
         worker.get("label") for worker in slide_workers
         if int(worker.get("vision_calls") or 0) < 1
@@ -1003,6 +1001,34 @@ def _pixel_review_acceptance(
             )
     if incomplete_slides:
         return False, f"Slide 缺少逐页像素自检: {incomplete_slides[:5]}"
+
+    # Page-worker clean is an intermediate diagnostic. Fresh artifacts plus
+    # the task-level final Review below are the authoritative delivery gate.
+    if failed_slides:
+        if not ws:
+            labels = [worker.get("label") for worker in failed_slides]
+            return False, f"Slide 子 Agent 未正常完成且无法核验交付物: {labels[:5]}"
+        try:
+            css_mtime = os.stat(os.path.join(ws, "base.css")).st_mtime_ns
+        except OSError:
+            return False, "Slide 子 Agent 状态异常且 base.css 缺失"
+        stale = []
+        for worker in failed_slides:
+            assigned_pages = worker.get("assigned_pages") or []
+            if not assigned_pages:
+                stale.append(f"{worker.get('label')}:unassigned")
+                continue
+            for page in assigned_pages:
+                number = int(page)
+                html = os.path.join(ws, "slides", f"slide_{number:02d}.html")
+                png = os.path.join(ws, "renders", f"slide_{number:02d}.png")
+                try:
+                    if os.stat(png).st_mtime_ns < max(os.stat(html).st_mtime_ns, css_mtime):
+                        stale.append(f"{worker.get('label')}:{number:02d}")
+                except OSError:
+                    stale.append(f"{worker.get('label')}:{number:02d}")
+        if stale:
+            return False, f"Slide 子 Agent 未完成且交付物缺失或过期: {stale[:8]}"
 
     reviews = [
         worker for worker in worker_recs
@@ -1062,8 +1088,8 @@ def _pixel_review_acceptance(
         reported_rounds = int(contract.get("refine_rounds") or 0)
     except (TypeError, ValueError):
         return False, "Review refine_rounds 不是有效整数"
-    if machine_rounds > 2:
-        return False, f"Review 实际 refine 轮次超过 2: {machine_rounds}"
+    if machine_rounds > 1:
+        return False, f"Review 实际 refine 轮次超过 1: {machine_rounds}"
     # The machine counter is authoritative.  A model's self-reported number is
     # useful trace metadata, but a mismatch cannot invalidate fresh pixels and
     # an otherwise complete Review contract.  In particular, weak models often

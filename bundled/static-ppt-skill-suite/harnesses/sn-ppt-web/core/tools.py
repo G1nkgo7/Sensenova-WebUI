@@ -202,10 +202,10 @@ def _review_refine_write_error(agent, path):
         return None
     rounds = int(getattr(agent, "_review_refine_rounds", 0) or 0)
     dirty = getattr(agent, "_dirty_visual_sources", set())
-    if rounds >= 2 and not dirty:
+    if rounds >= 1 and not dirty:
         setattr(agent, "_blocked_no_progress", int(getattr(agent, "_blocked_no_progress", 0) or 0) + 1)
         return (
-            "Review 已完成两轮机器记录的视觉 refine；不得开启第三轮页面修改。"
+            "Review 已完成一轮机器记录的视觉 refine；不得开启第二轮页面修改。"
             "恢复已验证最佳版本或返回 blocked，并如实保留 remaining。"
         )
     return None
