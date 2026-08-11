@@ -47,7 +47,7 @@ def _load_recorder_module():
         if not path.is_file():
             raise RuntimeError(f"Nova raw recorder module is missing: {path}")
         spec = importlib.util.spec_from_file_location(
-            "sn_ppt_web_nova_raw", path
+            "long_horizon_presenter_nova_raw", path
         )
         if spec is None or spec.loader is None:
             raise RuntimeError(f"cannot load Nova raw recorder: {path}")

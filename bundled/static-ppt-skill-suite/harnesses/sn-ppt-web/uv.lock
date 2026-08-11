@@ -1010,7 +1010,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ppt-inference-v2"
+name = "ppt-distillation-v2"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

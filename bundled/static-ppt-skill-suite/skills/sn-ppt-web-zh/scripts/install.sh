@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# sn-ppt-web · 环境安装脚本(让 skill 自包含:一键装齐运行所需的全部依赖)
+# sn-ppt-web-zh · 环境安装脚本(让 skill 自包含:一键装齐运行所需的全部依赖)
 #
 # 装什么(四块,缺一不可):
 #   1) normalize venv  —— stage_materials.py 内部文本 worker 使用 markitdown/pdfminer/openpyxl
@@ -16,7 +16,7 @@
 #   bash scripts/install.sh fonts chromium  # 只装字体+浏览器
 #
 # 产物路径(可用环境变量覆盖):
-#   NORMALIZE_VENV   默认 ~/.cache/sn-ppt-web/venv-normalize
+#   NORMALIZE_VENV   默认 ~/.cache/sn-ppt-web-zh/venv-normalize
 #   FONTS_DIR        默认 ~/.fonts
 #   PLAYWRIGHT_BROWSERS_PATH 默认 ~/.cache/ms-playwright
 # 装完打印一行 `export NORMALIZE_PY=...`,供当前运行环境使用。
@@ -24,7 +24,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-NORMALIZE_VENV="${NORMALIZE_VENV:-$HOME/.cache/sn-ppt-web/venv-normalize}"
+NORMALIZE_VENV="${NORMALIZE_VENV:-$HOME/.cache/sn-ppt-web-zh/venv-normalize}"
 FONTS_DIR="${FONTS_DIR:-$HOME/.fonts}"
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
 PYBIN="${PYBIN:-python3}"

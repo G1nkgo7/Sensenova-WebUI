@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HTML -> PNG 渲染脚本(long-horizon-presenter 自带,可移植)。
+"""HTML -> PNG 渲染脚本(sn-ppt-web-zh 自带,可移植)。
 
 任何有 shell / 代码执行能力的脚手架都能直接跑它来渲染一页幻灯片,**不依赖宿主提供 render 工具**:
 
@@ -1223,13 +1223,13 @@ _HARD_RENDER_KEYS = (
     "broken", "overflow",
 )
 
-# ``boxoverflow`` is intentionally advisory.  It compares child and parent
-# bounding boxes, so transformed type, optical punctuation, visible overflow
-# and deliberate editorial overlap can all trigger it even when no pixels are
-# clipped or unreadable.  Treating that signal as a process exit condition made
-# Slide/Review agents repeatedly shrink otherwise sound pages merely to clear a
-# checker.  The report is still persisted for DOM diagnosis; fresh rendered
-# pixels decide whether it is a real defect.
+# Geometry and typography heuristics (``boxoverflow``, ``overlap``, ``crowded``,
+# ``cjkTypography`` and contrast candidates) are intentionally advisory.  They
+# are useful diagnostic leads, but transforms, optical punctuation, intentional
+# editorial overlap and stylised CJK can trigger them on perfectly readable
+# pixels.  Only broken assets, confirmed overflow/clipping, runtime errors and
+# footer displacement are deterministic render blockers.  Advisory findings
+# remain in render.json for Slide/Review to verify against fresh pixels.
 
 
 def _sha256_file(path):

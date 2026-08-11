@@ -36,6 +36,8 @@ import time
 import traceback
 from pathlib import Path
 
+from core.contracts import CONTENT_FIDELITY_PATH, REVIEW_ISSUES_PATH
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SUITE_ROOT = os.path.dirname(os.path.dirname(ROOT))
 SKILLS_DIR = os.environ.get("PPT_SKILLS_ROOT") or os.path.join(SUITE_ROOT, "skills")
@@ -56,12 +58,11 @@ _BROKEN_STDIO_MARKERS = (
 
 
 def _run_noninteractive(command, **kwargs):
-    """Run a background helper without inheriting a stale terminal stdin.
+    """Run a helper without inheriting a stale terminal stdin.
 
     Long-running desktop sessions can outlive the PTY that launched Studio,
-    especially after macOS sleep/resume.  Python then may fail before the
-    helper script starts while initializing ``sys.stdin``.  Give every helper
-    a fresh DEVNULL stdin and retry that startup failure exactly once.
+    especially after macOS sleep/resume. Give helper processes a fresh DEVNULL
+    stdin and retry that startup failure exactly once.
     """
     kwargs.setdefault("stdin", subprocess.DEVNULL)
     for attempt in range(2):
@@ -452,6 +453,62 @@ def _delivery_audit(ws, expected):
     return True, "ok"
 
 
+def _ensure_present_html(ws, expected):
+    """Deterministically build a missing portable player before acceptance.
+
+    Orchestrator prose/tool-loop failures must not discard an otherwise usable
+    deck.  The Harness owns this final mechanical step and retries it once.  It
+    still fails closed when slide HTML/renders are absent or the build cannot
+    produce a non-empty ``present.html``.
+    """
+    target = os.path.join(ws, "present.html")
+    try:
+        if os.path.getsize(target) >= 100:
+            return True, "already_present"
+    except OSError:
+        pass
+    slides = _slide_htmls(ws)
+    if not slides:
+        return False, "没有页面，无法补建 present.html"
+    missing_renders = [
+        os.path.basename(path)
+        for path in slides
+        if not os.path.isfile(os.path.join(
+            ws, "renders", os.path.splitext(os.path.basename(path))[0] + ".png"
+        ))
+    ]
+    if missing_renders:
+        return False, f"页面渲染不完整，无法补建 present.html: {missing_renders[:5]}"
+    deck_py = os.path.join(
+        _workspace_skills_root(ws), _workspace_skill_name(ws), "scripts", "deck.py"
+    )
+    if not os.path.isfile(deck_py):
+        return False, "缺少 deck.py，无法补建 present.html"
+    failures = []
+    for attempt in range(2):
+        try:
+            proc = _run_noninteractive(
+                [sys.executable, deck_py, "build", ws, "--expected", str(expected)],
+                cwd=ws,
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            failures.append(f"{type(exc).__name__}: {exc}")
+            continue
+        try:
+            built = os.path.getsize(target) >= 100
+        except OSError:
+            built = False
+        if proc.returncode == 0 and built:
+            return True, "built_by_harness"
+        detail = (proc.stderr or proc.stdout or f"exit={proc.returncode}").strip()
+        failures.append(detail[-1200:] or "build 未生成 present.html")
+    return False, "Harness 两次补建 present.html 均失败: " + " | ".join(failures[-2:])
+
+
 # 只认规范页文件 `slide_<纯数字>.html`;skill 可能生成 slide_07.bak.html / slide_07.html.bak 之类的备份,
 # 它们**不算正式页**——否则 .bak.html 会被 glob 当成无渲染的页,误判整条 deck 拒收。
 _SLIDE_RE = re.compile(r"^slide_\d+\.html$")
@@ -669,7 +726,7 @@ def _material_acceptance(ws, worker_recs):
 
 
 def _research_acceptance(ws, worker_recs):
-    """Require Research to be ready, or partial with an explicit propagated boundary."""
+    """Accept Research by its durable brief; treat contract fields as diagnostics."""
     workers = [
         worker for worker in worker_recs
         if str(worker.get("kind") or "").lower() == "research"
@@ -681,29 +738,32 @@ def _research_acceptance(ws, worker_recs):
         return False, f"Research 必须是任务级单例，实际记录 {len(workers)} 个"
     worker = workers[0]
     contract = worker.get("contract") or {}
-    status = str(contract.get("status") or "").lower()
-    if not worker.get("clean") or status not in {"ready", "partial"}:
-        return False, f"Research 未返回 ready/可传播 partial: {status or 'missing'}"
-    output = _workspace_file(ws, contract.get("output") or "research/research.md")
-    try:
-        output_text = Path(output).read_text(encoding="utf-8", errors="ignore")
-    except (OSError, TypeError):
-        output_text = ""
+    status = str(contract.get("status") or "").strip().lower()
+    declared = str(contract.get("output") or "").strip()
+    output_text = ""
+    for relative in dict.fromkeys(
+            value for value in (declared, "research/research.md") if value):
+        output = _workspace_file(ws, relative)
+        try:
+            candidate_text = Path(output).read_text(encoding="utf-8", errors="ignore")
+        except (OSError, TypeError):
+            candidate_text = ""
+        if candidate_text.strip():
+            output_text = candidate_text
+            break
     if not output_text.strip():
         return False, "Research 正式 brief 缺失或为空"
-    if status == "partial":
-        unresolved = str(contract.get("unresolved") or "").strip()
-        if unresolved.lower() in {"", "none", "n/a", "not-applicable"}:
-            return False, "Research partial 缺少明确 unresolved"
-        grounded = os.path.join(ws, "plan", "grounded-knowledge.md")
-        try:
-            grounded_text = Path(grounded).read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            return False, "Research partial 未传播到 grounded-knowledge.md"
-        normalized_grounded = re.sub(r"\s+", " ", grounded_text).casefold()
-        normalized_unresolved = re.sub(r"\s+", " ", unresolved).casefold()
-        if normalized_unresolved not in normalized_grounded:
-            return False, "Research partial 的 unresolved 未原样传播到 grounded-knowledge.md"
+
+    warnings = []
+    if not worker.get("clean"):
+        warnings.append("worker 合同未标记 clean")
+    if status not in {"ready", "partial"}:
+        warnings.append(f"status={status or 'missing'}")
+    unresolved = str(contract.get("unresolved") or "").strip().lower()
+    if status == "partial" and unresolved in {"", "none", "n/a", "not-applicable"}:
+        warnings.append("partial 未声明 unresolved")
+    if warnings:
+        return True, "Research 合同字段不完整，已按正式产物继续: " + "; ".join(warnings)
     return True, "ok"
 
 
@@ -723,9 +783,14 @@ def _grounded_acceptance(ws, *, require_materials, research_workers):
 _ASSET_ID_RE = re.compile(
     r"(?i)\basset[_ -]?id\b\s*[:=]\s*[`'\"]?([A-Za-z0-9._-]+)"
 )
-_IMAGE_NEED_RE = re.compile(
-    r"(?im)^\s*[-*]?\s*image_opportunity\s*:\s*(?!none\b|code(?:_only)?\b|no\b)(.+)$"
+_IMAGE_OPPORTUNITY_RE = re.compile(
+    r"(?im)^\s*[-*+]?\s*(?:\*\*)?image_opportunity(?:\*\*)?\s*[:：]\s*(.+?)\s*$"
 )
+_NO_BITMAP_VALUES = {
+    "none", "no", "code", "code_only", "code-only", "canvas",
+    "canvas_only", "canvas-only", "chart", "chart_only", "chart-only",
+    "typography", "typography_only", "typography-only",
+}
 
 
 def _planned_asset_ids(ws):
@@ -736,9 +801,41 @@ def _planned_asset_ids(ws):
         except OSError:
             continue
         ids.update(_ASSET_ID_RE.findall(text))
-        if _IMAGE_NEED_RE.search(text):
-            needs_image = True
+        opportunity = _IMAGE_OPPORTUNITY_RE.search(text)
+        if opportunity:
+            value = opportunity.group(1).strip().lower()
+            head = re.split(r"[\s,，;；(/]", value, maxsplit=1)[0]
+            if head not in _NO_BITMAP_VALUES:
+                needs_image = True
     return ids, needs_image
+
+
+def _bitmap_exception_acceptance(ws):
+    """Accept an all-no-bitmap deck only after the explicit planning review."""
+    plans = sorted(glob.glob(os.path.join(ws, "plan", "slide_*.md")))
+    expected = {
+        int(match.group(1)) for path in plans
+        for match in [re.fullmatch(r"slide_(\d+)\.md", os.path.basename(path), re.I)]
+        if match
+    }
+    path = os.path.join(ws, "plan", "image-strategy.json")
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        reviewed = {int(page) for page in payload.get("reviewed_pages") or []
+                    if str(page).isdigit()}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False, "全册无位图但缺少有效 plan/image-strategy.json"
+    allowed = {
+        "explicit_user_request", "pure_typography", "pure_chart", "wireframe",
+        "accuracy_critical",
+    }
+    if (payload.get("status") != "bitmap_exception"
+            or payload.get("visible_subject_scan_complete") is not True
+            or str(payload.get("exception_basis") or "").lower() not in allowed
+            or len(str(payload.get("exception_reason") or "").strip()) < 20
+            or not expected or reviewed != expected):
+        return False, "plan/image-strategy.json 的全册无位图复核字段不完整"
+    return True, "ok"
 
 
 def _image_acceptance(ws, worker_recs, *, allow_existing_assets=False):
@@ -758,16 +855,25 @@ def _image_acceptance(ws, worker_recs, *, allow_existing_assets=False):
     asset_ids, needs_image = _planned_asset_ids(ws)
     if (asset_ids or needs_image) and not workers and not allow_existing_assets:
         return False, "逐页计划需要 Image，但没有任何 Image worker record"
-    bad = []
-    for worker in workers:
-        status = str((worker.get("contract") or {}).get("status") or "").lower()
-        if not worker.get("clean") or status != "ready":
-            bad.append(f"{worker.get('label')}:{status or 'missing'}")
-    if bad:
-        return False, f"Image 分组未全部 ready: {bad[:8]}"
+    ready_workers = [
+        worker for worker in workers
+        if worker.get("clean") and str(
+            (worker.get("contract") or {}).get("status") or ""
+        ).lower() == "ready"
+    ]
+    # A failed attempt superseded by a clean retry is diagnostic history, not
+    # a reason to reject a complete canonical catalog.
+    if workers and not ready_workers:
+        attempts = [
+            f"{worker.get('label')}:{str((worker.get('contract') or {}).get('status') or 'missing').lower()}"
+            for worker in workers
+        ]
+        return False, f"Image 阶段没有成功完成的 worker: {attempts[:8]}"
     if needs_image and not asset_ids:
         return False, "计划声明需要图片，但未分配稳定 asset_id"
     if not asset_ids:
+        if glob.glob(os.path.join(ws, "plan", "slide_*.md")):
+            return _bitmap_exception_acceptance(ws)
         return True, "ok"
     catalog_path = os.path.join(ws, "assets", "catalog.json")
     try:
@@ -895,9 +1001,9 @@ def _attachment_review_acceptance(ws, worker_recs):
         return False, "附件任务的最终 Review 未返回 ready"
     if contract.get("content_fidelity") != "pass":
         return False, "附件任务的最终 Review 未通过 content_fidelity"
-    report = os.path.join(ws, "_trace", "content-fidelity.md")
+    report = os.path.join(ws, *CONTENT_FIDELITY_PATH.split("/"))
     if not os.path.isfile(report) or os.path.getsize(report) < 40:
-        return False, "附件任务缺少 _trace/content-fidelity.md"
+        return False, f"附件任务缺少 {CONTENT_FIDELITY_PATH}"
     return True, "ok"
 
 
@@ -1003,10 +1109,139 @@ def _review_pixel_freshness(ws, review):
     return True, "ok"
 
 
+def _legacy_trace_vision_evidence(ws, trace_dir):
+    """Recover successful pre-sidecar inspections from messages + snapshots.
+
+    Vision images embedded in messages are resized copies, so byte equality
+    with the original render is not expected.  The tool-use/result pair proves
+    which source produced each immutable snapshot; source mtime must be no
+    newer than that snapshot, otherwise the inspection is correctly stale.
+    """
+    messages_path = os.path.join(trace_dir, "messages.json")
+    try:
+        messages = json.loads(Path(messages_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return [], {}
+    if not isinstance(messages, list):
+        return [], {}
+
+    uses = {}
+    results = {}
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use" and block.get("name") == "vision_analyze":
+                args = block.get("input") or {}
+                if isinstance(args, dict) and str(args.get("image_url") or "").strip():
+                    uses[str(block.get("id") or "")] = str(args["image_url"])
+            if block.get("type") != "tool_result" or not isinstance(block.get("content"), list):
+                continue
+            shot = next((
+                str(item.get("shot") or "") for item in block["content"]
+                if isinstance(item, dict) and item.get("type") == "image" and item.get("shot")
+            ), "")
+            if shot:
+                results[str(block.get("tool_use_id") or "")] = shot
+
+    paths = []
+    evidence = {}
+    for tool_id, shot in results.items():
+        raw = uses.get(tool_id)
+        if not raw:
+            continue
+        rel = os.path.relpath(raw, ws) if os.path.isabs(raw) else raw
+        rel = rel.replace("\\", "/").lstrip("./")
+        source = os.path.join(ws, rel)
+        snapshot = shot if os.path.isabs(shot) else os.path.join(trace_dir, shot)
+        try:
+            source_stat = os.stat(source)
+            snapshot_stat = os.stat(snapshot)
+            if source_stat.st_mtime_ns > snapshot_stat.st_mtime_ns:
+                continue
+            digest = hashlib.sha256(Path(source).read_bytes()).hexdigest()
+        except OSError:
+            continue
+        paths.append(rel)
+        evidence[rel] = {"sha256": digest, "mtime_ns": source_stat.st_mtime_ns}
+    return list(dict.fromkeys(paths)), evidence
+
+
+def _review_with_persisted_evidence(ws, review):
+    """Merge independently persisted pixel evidence into a Review record.
+
+    Review's natural-language final contract and successful pixel inspections
+    are separate runtime events.  A model can finish the inspections and then
+    stall before its final response, so acceptance must not rely solely on the
+    compact worker handoff.  The per-Review sidecar is written after every
+    successful vision call and remains authoritative for metadata recovery.
+    """
+    recovered = dict(review or {})
+    paths = list(recovered.get("vision_paths") or [])
+    evidence = dict(recovered.get("vision_evidence") or {})
+    candidates = []
+
+    trace_dir = str(recovered.get("trace_dir") or "").strip()
+    if trace_dir:
+        candidates.append(os.path.join(ws, trace_dir, "vision-evidence.json"))
+
+    label = str(recovered.get("label") or "review").strip()
+    if label and re.fullmatch(r"[A-Za-z0-9._-]+", label):
+        candidates.extend(glob.glob(os.path.join(
+            ws, "_trace", "**", "subagents", label, "vision-evidence.json"
+        ), recursive=True))
+
+    # Prefer the newest sidecar if a bounded Review retry produced more than
+    # one trace.  Merge rather than replace so an already complete in-memory
+    # record never loses evidence.
+    existing = [path for path in dict.fromkeys(candidates) if os.path.isfile(path)]
+    existing.sort(key=lambda path: os.path.getmtime(path))
+    recovered_calls = int(recovered.get("vision_calls") or 0)
+    for path in existing:
+        try:
+            payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        paths.extend(payload.get("vision_paths") or [])
+        persisted = payload.get("vision_evidence") or {}
+        if isinstance(persisted, dict):
+            evidence.update(persisted)
+        try:
+            recovered_calls = max(recovered_calls, int(payload.get("vision_calls") or 0))
+        except (TypeError, ValueError):
+            pass
+
+    if not evidence:
+        trace_candidates = []
+        if trace_dir:
+            trace_candidates.append(os.path.join(ws, trace_dir))
+        if label and re.fullmatch(r"[A-Za-z0-9._-]+", label):
+            trace_candidates.extend(glob.glob(os.path.join(
+                ws, "_trace", "**", "subagents", label
+            ), recursive=True))
+        for candidate in dict.fromkeys(trace_candidates):
+            legacy_paths, legacy_evidence = _legacy_trace_vision_evidence(ws, candidate)
+            paths.extend(legacy_paths)
+            evidence.update(legacy_evidence)
+        recovered_calls = max(recovered_calls, len(evidence))
+
+    recovered["vision_paths"] = list(dict.fromkeys(
+        str(path).replace("\\", "/") for path in paths if str(path or "").strip()
+    ))
+    recovered["vision_evidence"] = evidence
+    recovered["vision_calls"] = max(recovered_calls, len(evidence))
+    return recovered
+
+
 def _pixel_review_acceptance(
     worker_recs, *, ws=None, allow_review_only=False, require_content_fidelity=False
 ):
-    """Require exactly one correctly-scoped Review with complete pixel evidence."""
+    """Validate the latest bounded Review attempt and its pixel evidence."""
     latest = {}
     for worker in worker_recs:
         base = re.sub(r"_r\d+$", "", str(worker.get("label") or "")).lower()
@@ -1034,14 +1269,19 @@ def _pixel_review_acceptance(
     if incomplete_slides:
         return False, f"Slide 缺少逐页像素自检: {incomplete_slides[:5]}"
 
-    # Page-worker clean is an intermediate diagnostic. Fresh artifacts plus
-    # the task-level final Review below are the authoritative delivery gate.
+    # A page worker's ``clean`` flag is an intermediate diagnostic, not the
+    # final delivery verdict.  A worker may have emitted a soft/advisory warning
+    # before the orchestrator or final Review produced fresh valid artifacts.
+    # Preserve the safety gate by requiring every affected page to exist and
+    # have a PNG no older than its HTML/base.css; the task-level Review below is
+    # still the authoritative final acceptance.
     if failed_slides:
         if not ws:
             labels = [worker.get("label") for worker in failed_slides]
             return False, f"Slide 子 Agent 未正常完成且无法核验交付物: {labels[:5]}"
+        css_path = os.path.join(ws, "base.css")
         try:
-            css_mtime = os.stat(os.path.join(ws, "base.css")).st_mtime_ns
+            css_mtime = os.stat(css_path).st_mtime_ns
         except OSError:
             return False, "Slide 子 Agent 状态异常且 base.css 缺失"
         stale = []
@@ -1069,9 +1309,9 @@ def _pixel_review_acceptance(
     ]
     if not reviews:
         return False, "没有执行最终 Review"
-    if len(reviews) != 1:
-        return False, f"Review 必须是任务级单例，实际执行 {len(reviews)} 次"
-    review = reviews[0]
+    review = reviews[-1]
+    if ws:
+        review = _review_with_persisted_evidence(ws, review)
     contract = review.get("contract") or {}
     if not review.get("clean") or contract.get("status") != "ready":
         status = str(contract.get("status") or "missing")
@@ -1105,9 +1345,9 @@ def _pixel_review_acceptance(
             fresh_ok, fresh_reason = _review_pixel_freshness(ws, review)
             if not fresh_ok:
                 return False, fresh_reason
-            issue_log = os.path.join(ws, "_trace", "review-issues.md")
+            issue_log = os.path.join(ws, *REVIEW_ISSUES_PATH.split("/"))
             if not os.path.isfile(issue_log) or os.path.getsize(issue_log) < 20:
-                return False, "final_review 缺少唯一 _trace/review-issues.md 问题账本"
+                return False, f"final_review 缺少唯一 {REVIEW_ISSUES_PATH} 问题账本"
             issue_text = Path(issue_log).read_text(encoding="utf-8", errors="ignore")
             if re.search(r"(?mi)^\s*missing_pages\s*:\s*(?!none\s*$).+", issue_text):
                 return False, "final_review 问题账本仍声明 missing_pages"
@@ -1142,14 +1382,15 @@ def _accept(
     allow_review_only=False,
     allow_non_text_exit=False,
 ):
-    """结构化拒绝采样 —— 只有干净轨迹才提交。返回 (ok, 原因)。"""
+    """Accept usable deliveries; retain quality defects as visible warnings."""
+    warnings = []
     if orch.exit_reason == "review_blocked":
         failure = getattr(orch, "_terminal_contract_failure", None) or {}
         status = str(failure.get("status") or "blocked")
         detail = str(failure.get("detail") or "Review 未通过最终质量门")
-        return False, f"最终 Review 返回 {status}，任务已停止：{detail}"
+        warnings.append(f"最终 Review 返回 {status}：{detail}")
     if orch.exit_reason != "text_response" and not allow_non_text_exit:
-        return False, f"编排器未自然收尾(exit={orch.exit_reason})"
+        warnings.append(f"编排器未自然文本收尾(exit={orch.exit_reason})")
     slides = _slide_htmls(orch.ws)
     if not slides:
         return False, "没有产出任何 slide"
@@ -1164,6 +1405,9 @@ def _accept(
         return False, f"{len(missing)} 页没有成功渲染: {missing[:5]}"
     if blank:
         return False, f"{len(blank)} 页渲染疑似空白/破图(近乎纯色): {blank[:5]}"
+    player_ok, player_reason = _ensure_present_html(orch.ws, len(slides))
+    if not player_ok:
+        return False, player_reason
     delivery_ok, delivery_reason = _delivery_audit(orch.ws, len(slides))
     if not delivery_ok:
         return False, delivery_reason
@@ -1183,20 +1427,22 @@ def _accept(
         research_workers=research_workers,
     )
     if not grounded_ok:
-        return False, grounded_reason
+        warnings.append(grounded_reason)
     research_ok, research_reason = _research_acceptance(orch.ws, recs)
     if not research_ok:
-        return False, research_reason
+        warnings.append(research_reason)
+    elif research_reason != "ok":
+        warnings.append(research_reason)
     image_ok, image_reason = _image_acceptance(
         orch.ws, recs, allow_existing_assets=allow_review_only
     )
     if not image_ok:
-        return False, image_reason
+        warnings.append(image_reason)
     ownership_ok, ownership_reason = _slide_assignment_acceptance(
         orch.ws, recs, allow_partial=allow_review_only
     )
     if not ownership_ok:
-        return False, ownership_reason
+        warnings.append(ownership_reason)
     pixel_ok, pixel_reason = _pixel_review_acceptance(
         recs,
         ws=orch.ws,
@@ -1204,14 +1450,14 @@ def _accept(
         require_content_fidelity=require_materials or bool(research_workers),
     )
     if not pixel_ok:
-        return False, pixel_reason
+        warnings.append(pixel_reason)
     if require_materials:
         material_ok, material_reason = _material_acceptance(orch.ws, recs)
         if not material_ok:
-            return False, material_reason
+            warnings.append(material_reason)
         review_ok, review_reason = _attachment_review_acceptance(orch.ws, recs)
         if not review_ok:
-            return False, review_reason
+            warnings.append(review_reason)
     # 失败/崩溃/超时必须保留在 result.json。唯一例外是同一 Production
     # Group owner 的显式受控续作已成功；原失败记录仍在，只以 recovered /
     # superseded_by 标明已闭环，不再让已修复故障永久否决交付。
@@ -1221,12 +1467,20 @@ def _accept(
         if not worker.get("clean") and not worker.get("superseded_by")
     ]
     if bad:
-        return False, f"{len(bad)} 个子 agent 未通过: {bad[:5]}"
+        warnings.append(f"{len(bad)} 个子 agent 留有未闭环记录: {bad[:5]}")
     # 保守机核 V（v2.5，对齐 paper §3）:每页最终 HTML 重跑 render.py，任一页明确『机检结论: 不过』
     # (off_canvas / broken_image / cjk_tofu / placeholder)→ 整条 deck 判废。其余 advisory 信号不接进门。
     v_failed = [os.path.basename(s) for s in slides if not _v_pass(s, orch.ws)[0]]
     if v_failed:
-        return False, f"{len(v_failed)} 页未过保守机核 V(越界/裂图/豆腐块/占位): {v_failed[:5]}"
+        warnings.append(
+            f"{len(v_failed)} 页留有机核 V 硬伤(越界/裂图/豆腐块/占位): {v_failed[:5]}"
+        )
+    # Only the hard delivery gates above (slides, nonblank renders, player/build
+    # audit) reject the task.  Visual/agent/review defects remain visible without
+    # discarding a usable deck.
+    orch.delivery_warnings = list(dict.fromkeys(str(item) for item in warnings if item))
+    if orch.delivery_warnings:
+        return True, "completed_with_issues: " + "; ".join(orch.delivery_warnings[:8])
     return True, "ok"
 
 
@@ -1349,10 +1603,16 @@ def run_sample(sample_id, seed, run_dir, config):
     )
     nova_precheck = getattr(orch, "nova_precheck", None)
     if nova_precheck is not None and not nova_precheck.get("ok", False):
-        ok = False
-        reason = "Nova exact-raw precheck failed: " + "; ".join(
+        precheck_warning = "Nova exact-raw precheck failed: " + "; ".join(
             str(item) for item in nova_precheck.get("errors", [])[:5]
         )
+        if ok:
+            warnings = list(getattr(orch, "delivery_warnings", []) or [])
+            warnings.append(precheck_warning)
+            orch.delivery_warnings = list(dict.fromkeys(warnings))
+            reason = "completed_with_issues: " + "; ".join(orch.delivery_warnings[:8])
+        else:
+            reason = precheck_warning
     changed = True
     if revision:
         changed = _revision_fingerprint(run_dir) != before
@@ -1369,6 +1629,11 @@ def run_sample(sample_id, seed, run_dir, config):
         "revision_no": revision.get("revision_no") if revision else None,
         "parent_deck_id": revision.get("parent_deck_id") if revision else None,
         "revision_changed": changed if revision else None,
+        "quality_status": (
+            "needs_improvement" if ok and getattr(orch, "delivery_warnings", None)
+            else "ready" if ok else "unusable"
+        ),
+        "warnings": list(getattr(orch, "delivery_warnings", []) or []),
         # 覆盖率可见性:新演讲稿/叙事脊柱产物是否落盘(非门控,仅统计 rollout 覆盖率)
         "has_speech": os.path.exists(os.path.join(run_dir, "speech.md")),
         "has_narrative": os.path.exists(os.path.join(run_dir, "plan", "narrative.md")),

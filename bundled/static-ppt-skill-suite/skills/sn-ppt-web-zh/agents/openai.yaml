@@ -1,4 +1,4 @@
 interface:
   display_name: "sn-ppt-web-zh"
-  short_description: "创建或编辑完整的中文 HTML 演示文稿"
-  default_prompt: "使用 $sn-ppt-web-zh 创建或编辑这套 HTML 演示文稿，按实际影响范围分派任务，并交付逐页讲稿。"
+  short_description: "Create or edit polished HTML slide decks"
+  default_prompt: "Use $sn-ppt-web-zh to create or edit this HTML slide deck, route the work by complexity, and deliver a page-aligned speaker script."

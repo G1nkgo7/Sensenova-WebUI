@@ -72,6 +72,8 @@ SUBAGENT_MAX_TOKENS = int(os.environ.get("SUBAGENT_MAX_TOKENS", "16000"))  # 叶
 SLIDE_MAX_TURNS_BASE = int(os.environ.get("SLIDE_MAX_TURNS_BASE", "36"))
 SLIDE_MAX_TURNS_PER_EXTRA_PAGE = int(os.environ.get("SLIDE_MAX_TURNS_PER_EXTRA_PAGE", "12"))
 SLIDE_MAX_TURNS_CAP = int(os.environ.get("SLIDE_MAX_TURNS_CAP", "120"))
+MAX_REVIEW_ATTEMPTS = int(os.environ.get("MAX_REVIEW_ATTEMPTS", "3"))
+MAX_SLIDE_REPAIR_ATTEMPTS = int(os.environ.get("MAX_SLIDE_REPAIR_ATTEMPTS", "2"))
 MAX_SPAWN_DEPTH = int(os.environ.get("MAX_SPAWN_DEPTH", "1"))           # 委派深度上限(1 = 只有顶层能委派)
 # Vision 不设“单 Agent 累计看图数”上限。一张图在紧随的模型回合被看到后，
 # 便从**活跃模型上下文**里释放；真实像素仍由 Trace 快照永久保留。因此 36/80
@@ -284,11 +286,12 @@ class Agent:
         self.n_vision_imgs = 0      # 本 agent 累计成功看过的直接图片（仅指标，不是配额）
         self.n_vision_calls = 0     # 成功取得像素/视觉分析的调用数；B 视觉后端同样计数
         self.vision_paths = []      # 成功看过的工作区图片路径；用于核验 Image 派生资产
+        self.vision_evidence = {}   # path -> 当时像素的 sha256 / mtime；每次成功调用独立落盘
         self.final_text = ""
         self.exit_reason = None
         self.worker_recs = []       # 仅编排器:每个子 agent 的小结
         self._spawn_count = {}
-        self._role_spawn_count = {}  # Research / Review 是任务级单例，失败不得用 _rN 绕过
+        self._role_spawn_count = {}  # Research 单例；Review 允许有限复验
         self._slide_page_owners = {}  # page -> 唯一 Production Group label
         self._spawn_lock = threading.Lock()
         self._child_sem = threading.Semaphore(MAX_CONCURRENT_CHILDREN)   # 父级并发闸
@@ -342,7 +345,13 @@ class Agent:
             self.extra_tools.setdefault("delegate_task", lambda **a: delegate_task(self, **a))
 
     def log(self, m):
-        print(f"[{self.sid}/{self.label}] {m}", flush=True)
+        now = time.time()
+        elapsed = max(0.0, now - self.task_started_epoch)
+        print(
+            f"[{time.strftime('%H:%M:%S', time.localtime(now))} +"
+            f"{elapsed:6.1f}s] [{self.sid}/{self.label}] {m}",
+            flush=True,
+        )
 
     # —— 沙箱:写/渲染限定在 ws 内;读还可读只读的 skills_root 树 ——
     def safe(self, path):
@@ -584,6 +593,129 @@ def _retry_after(e):
         return None
 
 
+def _vision_evidence_path(agent):
+    return os.path.join(agent.trace.sub_dir, "vision-evidence.json")
+
+
+def _persist_vision_evidence(agent):
+    """Atomically persist successful vision evidence independently of handoff.
+
+    Review completion text and pixel evidence have different lifecycles.  A
+    weak model may finish inspecting pixels and then stall before emitting its
+    final contract; writing this sidecar after every successful vision call
+    prevents that protocol failure from erasing already observed pixels.
+    """
+    paths = list(dict.fromkeys(
+        str(path).replace("\\", "/")
+        for path in getattr(agent, "vision_paths", [])
+        if str(path or "").strip()
+    ))
+    evidence = getattr(agent, "vision_evidence", {})
+    if not isinstance(evidence, dict):
+        evidence = {}
+    payload = {
+        "version": 1,
+        "vision_calls": int(getattr(agent, "n_vision_calls", 0) or 0),
+        "vision_paths": paths,
+        "vision_evidence": evidence,
+    }
+    target = _vision_evidence_path(agent)
+    temporary = target + f".{os.getpid()}.{threading.get_ident()}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    except OSError as exc:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        agent.log(f"WARN: 视觉证据独立落盘失败: {exc}")
+
+
+def _restore_vision_evidence(agent):
+    """Restore vision metadata from the sidecar or immutable Trace snapshots.
+
+    The snapshot fallback is deliberately byte-exact: a current workspace
+    image is recovered only when its SHA256 matches a view_NN.png captured by
+    Trace.  A file modified after inspection therefore remains stale instead
+    of being accidentally certified.
+    """
+    restored_paths = []
+    restored_evidence = {}
+    restored_calls = 0
+    sidecar = _vision_evidence_path(agent)
+    try:
+        with open(sidecar, encoding="utf-8") as stream:
+            payload = json.load(stream)
+        if isinstance(payload, dict):
+            restored_paths.extend(payload.get("vision_paths") or [])
+            if isinstance(payload.get("vision_evidence"), dict):
+                restored_evidence.update(payload["vision_evidence"])
+            restored_calls = int(payload.get("vision_calls") or 0)
+    except (OSError, ValueError, TypeError):
+        pass
+
+    # Backward-compatible recovery for traces written before the sidecar was
+    # introduced.  tool_log supplies candidate paths; immutable view snapshots
+    # prove exactly which current bytes were really inspected.
+    tool_log_path = os.path.join(agent.trace.sub_dir, "tool_log.json")
+    snapshot_hashes = set()
+    for snapshot in glob.glob(os.path.join(agent.trace.sub_dir, "images", "view_*.png")):
+        try:
+            with open(snapshot, "rb") as stream:
+                snapshot_hashes.add(hashlib.sha256(stream.read()).hexdigest())
+        except OSError:
+            continue
+    if snapshot_hashes:
+        try:
+            with open(tool_log_path, encoding="utf-8") as stream:
+                tool_log = json.load(stream)
+        except (OSError, ValueError, TypeError):
+            tool_log = []
+        candidates = []
+        for item in tool_log if isinstance(tool_log, list) else []:
+            if not isinstance(item, dict) or item.get("name") != "vision_analyze":
+                continue
+            args = item.get("args") or {}
+            if isinstance(args, dict) and str(args.get("image_url") or "").strip():
+                candidates.append(str(args["image_url"]).replace("\\", "/"))
+        for path in dict.fromkeys(candidates):
+            try:
+                fp = agent.read_path(path)
+                with open(fp, "rb") as stream:
+                    digest = hashlib.sha256(stream.read()).hexdigest()
+                mtime_ns = os.stat(fp).st_mtime_ns
+            except OSError:
+                continue
+            if digest not in snapshot_hashes:
+                continue
+            restored_paths.append(path)
+            restored_evidence[path] = {"sha256": digest, "mtime_ns": mtime_ns}
+
+    current_paths = list(getattr(agent, "vision_paths", []) or [])
+    current_evidence = getattr(agent, "vision_evidence", {})
+    if not isinstance(current_evidence, dict):
+        current_evidence = {}
+    agent.vision_paths = list(dict.fromkeys(current_paths + restored_paths))
+    agent.vision_evidence = {**restored_evidence, **current_evidence}
+    agent.n_vision_calls = max(
+        int(getattr(agent, "n_vision_calls", 0) or 0),
+        restored_calls,
+        len(agent.vision_evidence),
+    )
+    if agent.vision_paths or agent.vision_evidence:
+        _persist_vision_evidence(agent)
+    return {
+        "vision_calls": agent.n_vision_calls,
+        "vision_paths": list(agent.vision_paths),
+        "vision_evidence": dict(agent.vision_evidence),
+    }
+
+
 def _exec_one_tool(agent, tu):
     """执行单个 tool_use,返回它的 tool_result(含 render 记账 / 图像快照 / is_error)。
     render 记账与图像快照会改 agent 状态,所以这些工具只在 _run_tools 里**顺序**调;
@@ -622,6 +754,7 @@ def _exec_one_tool(agent, tu):
                     }
                 except OSError:
                     pass
+            _persist_vision_evidence(agent)
     # 通用 render 记账:terminal 命令 stdout 里的 .png 路径 → 当作渲染产出记账。
     # render.py 在 png 路径后还会打 ✓ RENDER_OK / ⚠ 版式警告,末行未必是 png,
     # 故从后往前找最后一个以 .png 结尾的行(兼容"路径后有诊断输出";取末行会漏记每次成功渲染)。
@@ -708,6 +841,19 @@ def _role_contract_closeout_issues(agent, kind, contract):
     It only prevents a worker that already stopped from losing an otherwise
     valid run because its final machine-readable handoff omitted required keys.
     """
+    if kind == "research":
+        declared = str(contract.get("output") or "").strip()
+        for relative in dict.fromkeys(
+                value for value in (declared, "research/research.md") if value):
+            candidate = os.path.abspath(os.path.join(agent.ws, relative))
+            try:
+                inside = os.path.commonpath([os.path.abspath(agent.ws), candidate]) \
+                    == os.path.abspath(agent.ws)
+                if inside and os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
+                    return []
+            except (OSError, ValueError):
+                continue
+
     status = str(contract.get("status") or "").strip().lower()
     issues = []
     allowed_statuses = {
@@ -751,6 +897,91 @@ def _role_contract_closeout_issues(agent, kind, contract):
         except (TypeError, ValueError):
             issues.append("refine_rounds")
     return issues
+
+
+def _review_ledger_contract(agent):
+    """Recover a finished Review contract from this Review's canonical ledger.
+
+    The ledger and the assistant handoff are two serializations of the same
+    Review result.  A weak model can finish the former and then keep calling
+    tools instead of emitting the latter.  Recover only from a ledger changed
+    by *this* child and only when it explicitly says ``status: ready`` with no
+    remaining/hard issue.  Pixel coverage and freshness remain independently
+    enforced by the task-level acceptance gates.
+    """
+    if _task_kind(getattr(agent, "label", ""), agent.initial_user) != "review":
+        return {}
+    path = os.path.join(agent.ws, "_trace", "review-issues.md")
+    try:
+        with open(path, "rb") as stream:
+            payload = stream.read()
+        ledger_mtime_ns = os.stat(path).st_mtime_ns
+    except OSError:
+        return {}
+    digest = hashlib.sha256(payload).hexdigest()
+    initial_digest = str(getattr(agent, "_review_ledger_initial_sha256", "") or "")
+    initial_mtime_ns = int(getattr(agent, "_review_ledger_initial_mtime_ns", 0) or 0)
+    # A Review can legitimately rewrite an identical ready ledger.  Treat it as
+    # fresh when the file timestamp advanced; reject only a truly untouched
+    # ledger inherited from an earlier Review attempt.
+    if digest == initial_digest and ledger_mtime_ns <= initial_mtime_ns:
+        return {}
+    text = payload.decode("utf-8", errors="ignore")
+    contract = _final_contract(text)
+    if str(contract.get("status") or "").strip().lower() != "ready":
+        return {}
+
+    # Never turn an explicit hard issue or unresolved item into ``ready``.
+    remaining = str(contract.get("remaining") or "").strip().lower()
+    if remaining and remaining not in {"none", "[]", "无", "无剩余问题"}:
+        return {}
+    hard_line = re.search(r"(?mi)^\s*(?:hard|硬伤|硬门问题)\s*[:：]\s*(.+?)\s*$", text)
+    if hard_line and hard_line.group(1).strip().lower() not in {
+            "none", "[]", "无", "没有", "0", "n/a", "not-applicable"}:
+        return {}
+    hard_lists = re.findall(r"(?mi)^\s*hard_issues\s*[:：]\s*(.+?)\s*$", text)
+    if any(value.strip().lower() not in {"none", "[]", "无", "0"}
+           for value in hard_lists):
+        return {}
+
+    # A ready ledger written before ``deck.py build`` is not a final Review.
+    # Build may subset fonts, update base.css and re-render every page.  Recover
+    # the missing assistant contract only when the persisted Vision evidence
+    # still describes those exact post-build pixels.
+    pixel_state = _review_pixel_state(agent)
+    if (pixel_state["missing_pages"] or pixel_state["stale_pages"]
+            or pixel_state["dirty_sources"]):
+        return {}
+
+    expected_mode = str(getattr(agent, "_expected_review_mode", "") or "final_review")
+    recovered = dict(contract)
+    recovered["status"] = "ready"
+    recovered.setdefault("mode", expected_mode)
+    recovered.setdefault("remaining", "none")
+    recovered.setdefault("refine_rounds", str(
+        int(getattr(agent, "_review_refine_rounds", 0) or 0)
+    ))
+    if int(getattr(agent, "n_vision_calls", 0) or 0) > 0:
+        recovered.setdefault("final_pixels_inspected", "yes")
+    if expected_mode == "final_review":
+        recovered.setdefault("diagnosed_pages", "all")
+    if os.path.isfile(os.path.join(agent.ws, "speech.md")):
+        recovered.setdefault("speech_aligned", "yes")
+    recovered.setdefault("content_fidelity", "not-applicable")
+    recovered["contract_recovered_from"] = "_trace/review-issues.md"
+    return recovered
+
+
+def _contract_text(contract):
+    """Serialize a compact recovered contract without altering the raw trace."""
+    keys = (
+        "status", "mode", "content_fidelity", "diagnosed_pages",
+        "final_pixels_inspected", "speech_aligned", "remaining",
+        "refine_rounds", "contract_recovered_from",
+    )
+    return "\n".join(
+        f"{key}: {contract[key]}" for key in keys if key in contract
+    )
 
 
 def _history_tool_names(messages):
@@ -958,6 +1189,8 @@ def run_loop(agent):
                 pixel_state = _slide_pixel_state(
                     agent, getattr(agent, "_assigned_pages", [])
                 )
+            elif kind == "review" and getattr(agent, "role", "") != "orchestrator":
+                pixel_state = _review_pixel_state(agent)
             needs_pixel_closeout = bool(
                 pixel_state
                 and (
@@ -981,7 +1214,28 @@ def run_loop(agent):
                         f"{page:02d}" for page in pixel_state["stale_pages"]
                     ) or "none"
                     dirty = ",".join(pixel_state["dirty_sources"][:8]) or "none"
-                    if language == "en":
+                    if kind == "review" and language == "en":
+                        reminder = (
+                            "Your Review stopped before its post-build final-pixel proof was "
+                            f"current. Missing final pages: {missing}; stale pixels: {stale}; "
+                            f"unrendered visual sources: {dirty}. Run the deterministic build "
+                            "first, regenerate renders/review-contact.json and its contact sheets, "
+                            "then inspect the new final contact sheets (or final page PNGs) with "
+                            "vision_analyze. Update _trace/review-issues.md only after that final "
+                            "inspection, make no further visual edit/build, and return the exact "
+                            "Review contract. Do not claim ready before the final pixels are current."
+                        )
+                    elif kind == "review":
+                        reminder = (
+                            "你的 Review 在 build 后最终像素证据完整前停止了。"
+                            f"缺少最终页：{missing}；像素已过期：{stale}；"
+                            f"尚未重渲源文件：{dirty}。请先执行确定性 build，再重新生成 "
+                            "renders/review-contact.json 及联系表，然后用 vision_analyze 查看新生成的"
+                            "最终联系表（或最终单页 PNG）。最终看图后再更新 _trace/review-issues.md，"
+                            "之后不得继续修改视觉文件或 build，最后按角色卡返回 Review 合同。"
+                            "最终像素新鲜前不得返回 ready。"
+                        )
+                    elif language == "en":
                         reminder = (
                             "Your Slide Group stopped before its final pixel proof was current. "
                             f"Missing direct page Vision: {missing}; stale pixels: {stale}; "
@@ -1025,7 +1279,8 @@ def run_loop(agent):
             break
 
         _tool_content = _run_tools(agent, tool_uses, turn, tool_log)
-        terminal_contract_failure = _blocking_review_failure(agent)
+        recovered_review_contract = _review_ledger_contract(agent)
+        review_recovery = _blocking_review_failure(agent)
         blocked_no_progress = sum(
             1
             for result in (_tool_content or [])
@@ -1064,14 +1319,15 @@ def run_loop(agent):
         )
         role_can_finalize = bool(finalization_role)
         stop_after_results = False
-        if terminal_contract_failure:
-            stop_after_results = True
-            agent._terminal_contract_failure = terminal_contract_failure
+        if review_recovery:
+            # Review blocked means bounded repair/recheck, not whole-deck failure.
+            if isinstance(_tool_content, list):
+                _tool_content = _tool_content + [{
+                    "type": "text", "text": review_recovery["instruction"]
+                }]
             agent.log(
-                "唯一 Review 已返回 "
-                f"{terminal_contract_failure['status']}；停止 Orchestrator 后续工具调用。"
-                "Review 内部允许的修复与复核轮次已经结束，主编排器不得绕过质量门继续修改、"
-                "build 或探测运行环境。"
+                f"Review {review_recovery['status']}：进入有限重派/复验流程；"
+                "预算耗尽后保留问题账本并交付可用成稿。"
             )
         elif stalled and role_can_finalize and not finalization_only:
             agent._finalization_only = True
@@ -1082,14 +1338,19 @@ def run_loop(agent):
             if finalization_role == "review":
                 instruction = (
                     "停滞保护已关闭继续看图、渲染和页面修改。只使用已经取得的新鲜像素证据，"
-                    "把已发现问题与覆盖范围写入唯一 _trace/review-issues.md，然后按 Review "
+                    "把已发现问题与覆盖范围写入 _trace/review-issues.md；任务含附件、Research "
+                    "或其他内容保真要求时，同时把逐页事实核验写入 _trace/content-fidelity.md。"
+                    "收口阶段只允许补齐或更新这两份正式产物，然后按 Review "
                     "角色卡原样返回完整结构化合同。若全部页面已覆盖、最终像素仍新鲜且 remaining "
                     "为 none，应如实返回 status: ready；只有证据缺失或仍有真实问题时才返回 blocked。"
                     "不得虚构检查结果，也不得继续调用证据工具。"
                     if language != "en" else
                     "Stall protection has closed further vision, rendering, and page edits. "
                     "Use only the fresh pixel evidence already obtained, write the known issues "
-                    "and inspected scope to _trace/review-issues.md, then return the exact complete "
+                    "and inspected scope to _trace/review-issues.md. When the task has attachments, "
+                    "Research, or another content-fidelity requirement, also write the page-level "
+                    "fact verification to _trace/content-fidelity.md. Closeout may only complete or "
+                    "update these two canonical artifacts. Then return the exact complete "
                     "Review contract from the role card. Return status: ready when all pages were "
                     "covered, final pixels are fresh, and remaining is none; return blocked only "
                     "for real unresolved issues or missing evidence. Do not fabricate evidence or "
@@ -1135,6 +1396,9 @@ def run_loop(agent):
             agent._stalled_finalize_rounds = int(
                 getattr(agent, "_stalled_finalize_rounds", 0) or 0
             ) + 1
+            # A closeout response with no tools exits naturally before this
+            # branch.  Allow several correction turns for a weak model that
+            # initially emits a forbidden tool call, but keep a finite bound.
             stop_after_results = agent._stalled_finalize_rounds >= 4
         elif stalled:
             stop_after_results = True
@@ -1148,22 +1412,27 @@ def run_loop(agent):
         compacted = _compact_active_history(messages)
         if compacted:
             agent.log(f"[上下文维护] 已压缩早期普通文本/工具结果约 {compacted} 字符；原始 Trace 未改变")
+        if recovered_review_contract:
+            agent.final_text = _contract_text(recovered_review_contract)
+            agent._recovered_review_contract = recovered_review_contract
+            agent.exit_reason = "review_ledger_ready"
+            agent.log(
+                "Review 已在本轮问题账本中明确 ready；Harness 恢复最终合同并停止继续调用工具。"
+            )
+            break
         if stop_after_results:
-            if terminal_contract_failure:
-                agent.exit_reason = "review_blocked"
-            else:
-                agent.exit_reason = "stalled_repetition"
-                agent.log(
-                    "停滞保护触发：相同工具路线或未变化像素被重复请求；"
-                    "停止当前子任务，保留已有产物并避免继续膨胀上下文。"
-                )
+            agent.exit_reason = "stalled_repetition"
+            agent.log(
+                "停滞保护触发：相同工具路线或未变化像素被重复请求；"
+                "停止当前子任务，保留已有产物并避免继续膨胀上下文。"
+            )
             break
     else:
         agent.exit_reason = "max_turns"
         agent.log(f"到达 max_turns({agent.max_turns}),停止")
 
     # 纯 loop:到 max_turns 直接停,**不做强制总结**——模型怎么收(或没收)就怎么记,真实暴露其能力。
-    finished_clean = agent.exit_reason == "text_response"
+    finished_clean = agent.exit_reason in {"text_response", "review_ledger_ready"}
     agent.trace.write(trace_messages, tool_log)
     _write_usage(agent)   # ① 落 usage.json
     agent.nova_precheck = nova_bridge.finalize_agent(
@@ -1204,8 +1473,27 @@ def _normalize_task(t):
     for required in required_toolsets.get(kind, []):
         if required not in toolsets:
             toolsets.append(required)
-    return {"goal": goal, "context": t.get("context", ""),
-            "toolsets": toolsets, "role": t.get("role", "leaf"), "label": label}
+    if kind == "slide":
+        # Slide workers consume the frozen asset manifest; they are not a
+        # second, implicit Image stage.  Strip both acquisition toolsets even
+        # when a model copied them from its parent delegate payload.
+        toolsets = [name for name in toolsets if name not in {"image_gen", "web"}]
+    normalized = {
+        "goal": goal,
+        "context": t.get("context", ""),
+        "toolsets": toolsets,
+        "role": t.get("role", "leaf"),
+        "label": label,
+    }
+    assigned_pages = t.get("assigned_pages")
+    if isinstance(assigned_pages, (list, tuple, set)):
+        pages = sorted({
+            int(page) for page in assigned_pages
+            if str(page).strip().isdigit() and int(page) > 0
+        })
+        if pages:
+            normalized["assigned_pages"] = pages
+    return normalized
 
 
 def _task_kind(label, goal):
@@ -1331,14 +1619,22 @@ def _slide_group_pages(task):
     Skill 的标准标题是 ``Slide Group <id> [01, 02, ...]``。若标题缺失，
     再从明确的 ``plan/slide_NN.md`` 交接路径恢复；不从字号、颜色或尺寸中猜数字。
     """
+    structured_pages = task.get("assigned_pages")
+    if isinstance(structured_pages, (list, tuple, set)):
+        pages = {
+            int(page) for page in structured_pages
+            if str(page).strip().isdigit() and int(page) > 0
+        }
+        if pages:
+            return sorted(pages)
     text = f"{task.get('goal') or ''}\n{task.get('context') or ''}"
     pages = set()
     explicit_patterns = (
-        r"slide\s+group\b[^\[\n]*\[\s*([0-9pP\s,，、/;；\-–—~〜至到]+)\s*\]",
-        r"(?i)\bpages?\s*[:：]?\s*([0-9pP\s,，、/;；\-–—~〜至到]+)",
-        r"(?:页码|负责页面|处理页面)\s*[:：]?\s*([0-9pP\s,，、/;；\-–—~〜至到]+)",
-        r"(?:负责|处理|制作|完成)\s*第?\s*([0-9pP\s,，、/;；\-–—~〜至到]+)\s*页(?:面)?",
-        r"第\s*([0-9pP\s,，、/;；\-–—~〜至到]+)\s*页(?:面)?",
+        r"slide[ \t]+group\b[^\[\n]*\[[ \t]*([0-9pP \t,，、/;；\-–—~〜至到]+)[ \t]*\]",
+        r"(?i)\bpages?[ \t]*[:：]?[ \t]*([0-9pP \t,，、/;；\-–—~〜至到]+)",
+        r"(?:页码|负责页面|处理页面)[ \t]*[:：]?[ \t]*([0-9pP \t,，、/;；\-–—~〜至到]+)",
+        r"(?:负责|处理|制作|完成)[ \t]*第?[ \t]*([0-9pP \t,，、/;；\-–—~〜至到]+)[ \t]*页(?:面)?",
+        r"第[ \t]*([0-9pP \t,，、/;；\-–—~〜至到]+)[ \t]*页(?:面)?",
     )
     for pattern in explicit_patterns:
         match = re.search(pattern, text, re.I)
@@ -1419,6 +1715,118 @@ def _slide_pixel_state(agent, assigned_pages):
         "inspected_pages": inspected,
         "missing_pages": sorted(set(assigned) - set(inspected)),
         "stale_pages": sorted(set(stale)),
+        "dirty_sources": dirty,
+    }
+
+
+def _review_pixel_state(agent):
+    """Return machine-derived final-pixel coverage for a full-deck Review.
+
+    Contact-sheet evidence is expanded through ``review-contact.json``.  The
+    viewed image bytes and mtime must still match, and every slide render must
+    be newer than both its HTML and shared CSS.  This keeps a pre-build Review
+    from being recovered as ready after font bundling changed final pixels.
+    """
+    expected_mode = str(
+        getattr(agent, "_expected_review_mode", "") or "final_review"
+    )
+    workspace = str(getattr(agent, "ws", "") or "")
+    if not workspace:
+        # Lightweight protocol/unit-test agents do not own a workspace.  The
+        # task-level acceptance gate still enforces real Review freshness.
+        return {
+            "inspected_pages": [], "missing_pages": [], "stale_pages": [],
+            "dirty_sources": [],
+        }
+    if expected_mode != "final_review":
+        return {
+            "inspected_pages": [], "missing_pages": [], "stale_pages": [],
+            "dirty_sources": [],
+        }
+    manifest_path = os.path.join(workspace, "renders", "review-contact.json")
+    try:
+        with open(manifest_path, encoding="utf-8") as stream:
+            full = (json.load(stream).get("full") or {})
+    except (OSError, ValueError, TypeError):
+        expected = []
+        slides_dir = os.path.join(workspace, "slides")
+        try:
+            for name in os.listdir(slides_dir):
+                match = re.fullmatch(r"slide_(\d+)\.html", name)
+                if match:
+                    expected.append(int(match.group(1)))
+        except OSError:
+            pass
+        return {
+            "inspected_pages": [],
+            "missing_pages": sorted(set(expected)) or [0],
+            "stale_pages": [],
+            "dirty_sources": [],
+        }
+    expected = {int(page) for page in full.get("pages") or [] if int(page) > 0}
+    groups = {
+        str(item.get("path") or "").replace("\\", "/").lstrip("./"): {
+            int(page) for page in item.get("pages") or []
+        }
+        for item in full.get("groups") or [] if isinstance(item, dict)
+    }
+    evidence = getattr(agent, "vision_evidence", {})
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    def normalize(path):
+        raw = str(path or "")
+        if os.path.isabs(raw):
+            raw = os.path.relpath(raw, workspace)
+        return raw.replace("\\", "/").lstrip("./")
+
+    current = {}
+    for raw, item in evidence.items():
+        rel = normalize(raw)
+        fp = os.path.join(workspace, rel)
+        try:
+            with open(fp, "rb") as stream:
+                digest = hashlib.sha256(stream.read()).hexdigest()
+            mtime_ns = os.stat(fp).st_mtime_ns
+        except OSError:
+            continue
+        if (isinstance(item, dict) and item.get("sha256") == digest
+                and int(item.get("mtime_ns") or 0) == mtime_ns):
+            current[rel] = mtime_ns
+
+    css = os.path.join(workspace, "base.css")
+    css_mtime = os.stat(css).st_mtime_ns if os.path.isfile(css) else 0
+
+    def page_is_fresh(page, viewed_mtime):
+        html = os.path.join(workspace, "slides", f"slide_{page:02d}.html")
+        png = os.path.join(workspace, "renders", f"slide_{page:02d}.png")
+        try:
+            source_mtime = max(os.stat(html).st_mtime_ns, css_mtime)
+            png_mtime = os.stat(png).st_mtime_ns
+        except OSError:
+            return False
+        return source_mtime <= png_mtime <= viewed_mtime
+
+    covered = set()
+    stale = set()
+    for rel, viewed_mtime in current.items():
+        pages = groups.get(rel)
+        if pages is None:
+            match = re.search(r"(?:^|/)renders/slide_(\d+)\.png$", rel, re.I)
+            pages = {int(match.group(1))} if match else set()
+        for page in pages:
+            if page_is_fresh(page, viewed_mtime):
+                covered.add(page)
+            else:
+                stale.add(page)
+    dirty = sorted(
+        os.path.relpath(path, workspace).replace(os.sep, "/")
+        for path in getattr(agent, "_dirty_visual_sources", set())
+    )
+    return {
+        "inspected_pages": sorted(covered),
+        "missing_pages": sorted(expected - covered),
+        "stale_pages": sorted(stale),
         "dirty_sources": dirty,
     }
 
@@ -1508,6 +1916,17 @@ def _build_child(parent, task):
             "simple_edit" if re.search(r"\bmode\s*=\s*simple_edit\b", review_text, re.I)
             else "final_review"
         )
+        ledger_path = os.path.join(parent.ws, "_trace", "review-issues.md")
+        try:
+            with open(ledger_path, "rb") as stream:
+                ledger_payload = stream.read()
+            child._review_ledger_initial_sha256 = hashlib.sha256(
+                ledger_payload
+            ).hexdigest()
+            child._review_ledger_initial_mtime_ns = os.stat(ledger_path).st_mtime_ns
+        except OSError:
+            child._review_ledger_initial_sha256 = ""
+            child._review_ledger_initial_mtime_ns = 0
     return child, name
 
 
@@ -1612,6 +2031,8 @@ def _child_handoff(parent, child, name, clean, contract):
         "contract": contract,
         "artifacts": artifacts,
         "final_response": final_text,
+        "vision_paths": list(getattr(child, "vision_paths", []) or []),
+        "vision_evidence": dict(getattr(child, "vision_evidence", {}) or {}),
     }
     handoff_path = os.path.join(child.trace.sub_dir, "handoff.json")
     temporary = handoff_path + f".{os.getpid()}.{threading.get_ident()}.tmp"
@@ -1630,6 +2051,7 @@ def _child_handoff(parent, child, name, clean, contract):
         "handoff_path": handoff_rel,
         "renders": child.n_renders,
         "vision_calls": child.n_vision_calls,
+        "vision_evidence_path": f"{trace_rel}/vision-evidence.json",
         "shot": child.last_shot,
     }
 
@@ -1838,13 +2260,6 @@ def _grounding_before_downstream_error(parent, tasks):
         return "存在用户附件，但 Material 尚未完成；不能提前委派下游制作。"
     if not evidence_workers and not has_attachments:
         return None
-    failed = [
-        str(worker.get("label") or "evidence")
-        for worker in evidence_workers
-        if not worker.get("clean")
-    ]
-    if failed:
-        return f"Material/Research 未干净完成: {failed[:5]}"
     grounded = os.path.join(parent.ws, "plan", "grounded-knowledge.md")
     try:
         valid = os.path.isfile(grounded) and os.path.getsize(grounded) >= 40
@@ -1852,14 +2267,189 @@ def _grounding_before_downstream_error(parent, tasks):
         valid = False
     if not valid:
         return (
-            "Material/Research 已回收，但缺少有效 plan/grounded-knowledge.md。"
+            "Material/Research 的合同状态仅用于诊断；当前真正缺少的是有效的 "
+            "plan/grounded-knowledge.md。"
             "请立即综合用户事实、外部核验、假设与 unresolved，read_file 验证后再委派。"
         )
     return None
 
 
+_IMAGE_OPPORTUNITY_LINE_RE = re.compile(
+    r"(?im)^\s*[-*+]?\s*(?:\*\*)?image_opportunity(?:\*\*)?\s*[:：]\s*(.+?)\s*$"
+)
+_PLAN_ASSET_ID_RE = re.compile(
+    r"(?i)\basset[_ -]?id\b\s*[:=]\s*[`'\"]?([A-Za-z0-9._-]+)"
+)
+_NO_BITMAP_VALUES = {
+    "none", "no", "code", "code_only", "code-only", "canvas",
+    "canvas_only", "canvas-only", "chart", "chart_only", "chart-only",
+    "typography", "typography_only", "typography-only",
+}
+_BITMAP_EXCEPTION_BASES = {
+    "explicit_user_request", "pure_typography", "pure_chart", "wireframe",
+    "accuracy_critical",
+}
+
+
+def _normalize_image_opportunity(raw_value):
+    """Return the leading machine-readable image-opportunity enum.
+
+    Plans are written by language models and commonly append a human-readable
+    explanation with either ASCII or CJK punctuation, for example
+    ``none（数据页，图表本身就是主视觉）``.  The dispatch gate must validate the
+    leading enum instead of treating the entire prose suffix as part of it.
+    """
+    value = str(raw_value or "").strip().lower()
+    match = re.match(r"([a-z][a-z0-9_-]*)", value)
+    if match:
+        return match.group(1)
+    return re.split(r"[\s,，;；(/（]", value, maxsplit=1)[0]
+
+
+def _slide_image_plan(ws):
+    """Read the frozen per-page bitmap decision and stable asset references."""
+    plans = []
+    for path in sorted(glob.glob(os.path.join(ws, "plan", "slide_*.md"))):
+        match = re.fullmatch(r"slide_(\d+)\.md", os.path.basename(path), re.I)
+        if not match:
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as stream:
+                text = stream.read()
+        except OSError:
+            continue
+        opportunity = _IMAGE_OPPORTUNITY_LINE_RE.search(text)
+        raw_value = opportunity.group(1).strip() if opportunity else ""
+        normalized = _normalize_image_opportunity(raw_value)
+        needs_bitmap = bool(raw_value) and normalized not in _NO_BITMAP_VALUES
+        plans.append({
+            "page": int(match.group(1)),
+            "declared": bool(opportunity),
+            "image_opportunity": normalized,
+            "needs_bitmap": needs_bitmap,
+            "asset_ids": sorted(set(_PLAN_ASSET_ID_RE.findall(text))),
+        })
+    return plans
+
+
+def _bitmap_exception_error(ws, plans):
+    """Validate the explicit, machine-readable exception for an all-no-bitmap deck."""
+    path = os.path.join(ws, "plan", "image-strategy.json")
+    try:
+        with open(path, encoding="utf-8") as stream:
+            payload = json.load(stream)
+    except (OSError, ValueError, TypeError):
+        return (
+            "逐页计划没有任何位图机会，但缺少 plan/image-strategy.json 的确定性复核。"
+            "请重新扫描可见人物、场地、产品、作品、活动、体验和情绪主画面；"
+            "只有确属例外时才写入 bitmap_exception。"
+        )
+    basis = str(payload.get("exception_basis") or "").strip().lower()
+    reason = str(payload.get("exception_reason") or "").strip()
+    covered = {int(page) for page in payload.get("reviewed_pages") or []
+               if str(page).isdigit()}
+    expected = {item["page"] for item in plans}
+    if (str(payload.get("status") or "").strip().lower() != "bitmap_exception"
+            or payload.get("visible_subject_scan_complete") is not True
+            or basis not in _BITMAP_EXCEPTION_BASES
+            or len(reason) < 20
+            or covered != expected):
+        return (
+            "plan/image-strategy.json 的无位图复核无效；必须包含 status=bitmap_exception、"
+            "visible_subject_scan_complete=true、合法 exception_basis、具体理由，"
+            "并用 reviewed_pages 覆盖全部页面。"
+        )
+    return None
+
+
+def _catalog_asset_error(ws, required_ids):
+    """Require each frozen asset id to resolve to a ready file inside the workspace."""
+    catalog_path = os.path.join(ws, "assets", "catalog.json")
+    try:
+        with open(catalog_path, encoding="utf-8") as stream:
+            payload = json.load(stream)
+        entries = payload.get("assets") if isinstance(payload, dict) else None
+        if not isinstance(entries, list):
+            raise TypeError("assets is not a list")
+    except (OSError, ValueError, TypeError) as exc:
+        return f"Image Agent 素材清单 assets/catalog.json 无法验收: {type(exc).__name__}"
+    by_id = {
+        str(item.get("asset_id")): item for item in entries
+        if isinstance(item, dict) and item.get("asset_id")
+    }
+    missing, invalid = [], []
+    root = os.path.abspath(ws)
+    for asset_id in sorted(required_ids):
+        item = by_id.get(asset_id)
+        if not item:
+            missing.append(asset_id)
+            continue
+        raw_path = str(item.get("path") or "").strip()
+        actual = raw_path if os.path.isabs(raw_path) else os.path.join(root, raw_path)
+        actual = os.path.abspath(actual)
+        try:
+            inside = os.path.commonpath([root, actual]) == root
+        except ValueError:
+            inside = False
+        if str(item.get("status") or "").lower() != "ready" or not inside \
+                or not os.path.isfile(actual):
+            invalid.append(asset_id)
+    if missing or invalid:
+        return f"Image Agent 素材清单未闭环: missing={missing[:8]} not_ready={invalid[:8]}"
+    return None
+
+
+def _image_before_slide_error(parent, tasks):
+    """Enforce Image → manifest → Slide ordering at dispatch time."""
+    kinds = {_task_kind(task.get("label"), task.get("goal")) for task in tasks}
+    if "slide" not in kinds:
+        return None
+    if "image" in kinds:
+        return (
+            "Image 与 Slide 不能同批委派；先等待 Image Agent 完成并验收 "
+            "assets/catalog.json，再启动 Slide Agent。"
+        )
+    plans = _slide_image_plan(parent.ws)
+    if not plans:
+        return "Slide 启动前缺少 plan/slide_NN.md，无法冻结逐页配图机会。"
+    undeclared = [item["page"] for item in plans if not item["declared"]]
+    if undeclared:
+        return f"逐页计划缺少 image_opportunity: pages={undeclared[:12]}"
+    image_pages = [item for item in plans if item["needs_bitmap"]]
+    if not image_pages:
+        return _bitmap_exception_error(parent.ws, plans)
+    missing_ids = [item["page"] for item in image_pages if not item["asset_ids"]]
+    if missing_ids:
+        return (
+            "存在配图机会，但逐页计划尚未回填稳定 asset_id: "
+            f"pages={missing_ids[:12]}"
+        )
+    required_ids = {asset_id for item in image_pages for asset_id in item["asset_ids"]}
+    with parent._spawn_lock:
+        workers = list(parent.worker_recs)
+    image_workers = [
+        worker for worker in workers
+        if str(worker.get("kind") or "").lower() == "image"
+        or str(worker.get("label") or "").lower().startswith("image")
+    ]
+    revision_mode = bool((getattr(parent, "cfg", {}) or {}).get("_revision_mode"))
+    if not revision_mode:
+        ready_workers = [
+            worker for worker in image_workers
+            if worker.get("clean") and str(
+                (worker.get("contract") or {}).get("status") or ""
+            ).lower() == "ready"
+        ]
+        if not ready_workers:
+            return (
+                "计划存在配图机会，但尚无完成且 status=ready 的 Image Agent；"
+                "禁止 Slide Agent 绕过素材阶段直接制作或自行生图。"
+            )
+    return _catalog_asset_error(parent.ws, required_ids)
+
+
 def _reserve_singleton_roles(parent, tasks):
-    """Reserve task-level singleton roles and unique Slide page ownership."""
+    """Reserve singleton roles plus bounded Review/Slide repair attempts."""
     requested = {}
     slide_owners = {}
     for task in tasks:
@@ -1883,11 +2473,23 @@ def _reserve_singleton_roles(parent, tasks):
         return f"{duplicate} 是任务级单例；同一批次不能创建多个实例"
     with parent._spawn_lock:
         for kind in requested:
-            if int(parent._role_spawn_count.get(kind, 0) or 0) >= 1:
+            used = int(parent._role_spawn_count.get(kind, 0) or 0)
+            limit = MAX_REVIEW_ATTEMPTS if kind == "review" else 1
+            if used >= limit:
                 return (
-                    f"{kind} 已执行过；失败、超时或 blocked 必须让当前任务如实失败，"
-                    "不得创建 _r2/_r3 绕过原结果"
+                    f"{kind} 已达到受控执行上限 {limit}；停止继续重派，"
+                    "保留现有问题账本并进入可交付收尾"
                 )
+            if kind == "review" and used:
+                reviews = [
+                    item for item in (getattr(parent, "worker_recs", []) or [])
+                    if str(item.get("kind") or "").lower() == "review"
+                    or str(item.get("label") or "").lower().startswith("review")
+                ]
+                latest = reviews[-1] if reviews else {}
+                latest_status = str((latest.get("contract") or {}).get("status") or "").lower()
+                if latest.get("clean") and latest_status == "ready":
+                    return "Review 已返回 ready；不得为审美偏好重复复验"
         existing_owners = getattr(parent, "_slide_page_owners", {})
         latest_slide_attempts = {}
         for worker in getattr(parent, "worker_recs", []) or []:
@@ -1910,7 +2512,24 @@ def _reserve_singleton_roles(parent, tasks):
                     resumed[label] = str(previous.get("label") or label)
                     continue
                 if owner == label and previous and previous.get("clean"):
-                    return f"Slide 页码 {page:02d} 的 owner {label} 已完成；不得重复执行"
+                    reviews = [
+                        item for item in (getattr(parent, "worker_recs", []) or [])
+                        if str(item.get("kind") or "").lower() == "review"
+                        or str(item.get("label") or "").lower().startswith("review")
+                    ]
+                    latest_review = reviews[-1] if reviews else {}
+                    review_status = str(
+                        (latest_review.get("contract") or {}).get("status") or ""
+                    ).lower()
+                    attempts = sum(
+                        1 for item in (getattr(parent, "worker_recs", []) or [])
+                        if re.sub(r"_r\d+$", "", str(item.get("label") or "")) == label
+                    )
+                    if (latest_review and review_status == "blocked"
+                            and attempts <= MAX_SLIDE_REPAIR_ATTEMPTS):
+                        resumed[label] = str(previous.get("label") or label)
+                        continue
+                    return f"Slide 页码 {page:02d} 的 owner {label} 已完成；没有待修硬伤"
                 return (
                     f"Slide 页码 {page:02d} 已归属 {owner}；"
                     f"不得再交给 {label} 并发覆盖"
@@ -1961,32 +2580,50 @@ def _reserve_singleton_roles(parent, tasks):
 def _child_contract_error(parent, child, kind, contract):
     """Return the machine-readable contract error for one completed worker."""
     status = str(contract.get("status") or "").strip().lower()
+    # blocked is a valid, explicit diagnostic result for visual workers.  It is
+    # recorded as clean=False by _run_child, but must retain its real reason.
+    if kind in {"review", "slide"} and status == "blocked":
+        return ""
     if kind in {"material", "image", "review", "slide"} and status != "ready":
         return f"{kind} 必须返回 status: ready，得到 {status or 'missing'}"
     if kind == "research":
+        # Research is accepted by its durable artifact, not by optional prose
+        # contract fields.  A model may omit ``status``/``unresolved`` while
+        # still writing a complete brief; making that omission fatal used to
+        # lock every downstream Image/Slide/Review dispatch (case 422).
+        declared = str(contract.get("output") or "").strip()
+        candidates = [declared, "research/research.md"]
+        output_path = ""
+        for output in dict.fromkeys(value for value in candidates if value):
+            candidate = os.path.abspath(os.path.join(parent.ws, output))
+            try:
+                inside = os.path.commonpath([os.path.abspath(parent.ws), candidate]) \
+                    == os.path.abspath(parent.ws)
+                usable = inside and os.path.isfile(candidate) and os.path.getsize(candidate) > 0
+            except (OSError, ValueError):
+                usable = False
+            if usable:
+                output_path = candidate
+                break
+        if not output_path:
+            return f"Research 正式产物不存在或为空: {declared or 'research/research.md'}"
+
+        contract_warnings = []
         if status not in {"ready", "partial"}:
-            return f"research 必须返回 ready 或可传播的 partial，得到 {status or 'missing'}"
-        output = str(contract.get("output") or "research/research.md").strip()
-        output_path = os.path.abspath(os.path.join(parent.ws, output))
-        if (os.path.commonpath([os.path.abspath(parent.ws), output_path])
-                != os.path.abspath(parent.ws)
-                or not os.path.isfile(output_path)):
-            return f"Research 正式产物不存在: {output}"
+            contract_warnings.append(f"status={status or 'missing'}")
         unresolved = str(contract.get("unresolved") or "").strip().lower()
         if status == "partial" and unresolved in {"", "none", "n/a", "not-applicable"}:
-            return "Research partial 必须明确 unresolved，供 grounded-knowledge 传播"
+            contract_warnings.append("partial 未声明 unresolved")
+        if contract_warnings:
+            contract["validation_warning"] = (
+                "Research 合同字段不完整，已按正式产物继续: "
+                + "; ".join(contract_warnings)
+            )
     return ""
 
 
 def _blocking_review_failure(parent):
-    """Return the terminal failure from the task-level singleton Review.
-
-    Review owns its bounded diagnose -> repair -> recheck loop.  Once that
-    worker returns blocked/unclean, the orchestrator may not keep editing,
-    rerendering, rebuilding, or probing the runtime: those actions would make
-    the recorded Review evidence stale while acceptance still (correctly)
-    rejects the singleton Review contract.
-    """
+    """Return one bounded recovery instruction after the latest blocked Review."""
     if str(getattr(parent, "role", "") or "").lower() != "orchestrator":
         return None
     lock = getattr(parent, "_spawn_lock", None)
@@ -2003,6 +2640,10 @@ def _blocking_review_failure(parent):
     if not reviews:
         return None
     review = reviews[-1]
+    notified = str(getattr(parent, "_review_recovery_notified", "") or "")
+    review_label = str(review.get("label") or "review")
+    if notified == review_label:
+        return None
     contract = review.get("contract") or {}
     status = str(contract.get("status") or "missing").strip().lower()
     if review.get("clean") and status == "ready":
@@ -2014,10 +2655,24 @@ def _blocking_review_failure(parent):
         or review.get("exit_reason")
         or "Review 未通过最终质量门"
     ).strip()
+    parent._review_recovery_notified = review_label
+    attempts = len(reviews)
+    if attempts >= MAX_REVIEW_ATTEMPTS:
+        instruction = (
+            "Review 复验预算已用完。不要继续改页或探测环境；保留 _trace/review-issues.md，"
+            "构建 present.html 并自然收尾。只要成稿可渲染、可播放，系统会以“完成（有待改进）”交付。"
+        )
+    else:
+        instruction = (
+            "Review 发现未解决问题。只把有新鲜像素/DOM 证据的真实硬伤交回原页面 owner，"
+            f"每个 Slide Group 最多重派 {MAX_SLIDE_REPAIR_ATTEMPTS} 次；修复后再委派 Review 复验。"
+            "advisory 不得触发返工。若无法稳定改善，保留最佳版本与问题账本并构建交付物。"
+        )
     return {
-        "label": str(review.get("label") or "review"),
+        "label": review_label,
         "status": status,
         "detail": detail,
+        "instruction": instruction,
     }
 
 
@@ -2028,8 +2683,17 @@ def _run_child(parent, task, ticket):
     ticket["label"] = name
     with parent._child_sem:                  # 父级并发闸:跨多个并发的 delegate_task 调用统一限并发
         fin = child.run()
+    _restore_vision_evidence(child)
     contract = _final_contract(child.final_text)
     kind = _task_kind(name, task.get("goal"))
+    if kind == "review" and not contract:
+        contract = _review_ledger_contract(child)
+        if contract:
+            child.final_text = _contract_text(contract)
+            child.exit_reason = "review_ledger_ready"
+            fin = True
+    if str(contract.get("status") or "").strip().lower() == "blocked":
+        fin = False
     nova_precheck = getattr(child, "nova_precheck", None)
     if nova_precheck is not None and not nova_precheck.get("ok", False):
         fin = False
@@ -2073,10 +2737,16 @@ def _run_child(parent, task, ticket):
     if contract_error:
         fin = False
         contract["validation_error"] = contract_error
+    if kind == "slide" and not fin:
+        restored = tools.restore_verified_slides(child)
+        if restored:
+            contract["rollback"] = "restored_last_verified_baseline"
+            contract["rollback_pages"] = restored
     rec = {"label": name, "kind": kind, "clean": fin, "renders": child.n_renders,
            "vision_calls": child.n_vision_calls,
            "vision_paths": list(child.vision_paths),
            "vision_evidence": dict(getattr(child, "vision_evidence", {}) or {}),
+           "trace_dir": os.path.relpath(child.trace.sub_dir, parent.ws).replace(os.sep, "/"),
            "assigned_pages": assigned_pages,
            "inspected_pages": inspected_pages,
            "stale_pixel_pages": stale_pixel_pages,
@@ -2090,11 +2760,11 @@ def _run_child(parent, task, ticket):
         rec["resume_of"] = resume_of
     with parent._spawn_lock:
         if not ticket.get("abandoned"):
-            if fin and resume_of:
+            if resume_of:
                 for previous in reversed(parent.worker_recs):
                     if str(previous.get("label") or "") == resume_of:
                         previous["superseded_by"] = name
-                        previous["recovered"] = True
+                        previous["recovered"] = bool(fin)
                         break
             parent.worker_recs.append(rec)
             ticket["recorded"] = True
@@ -2164,7 +2834,7 @@ def _record_worker_failure(parent, task, ticket, exit_reason, detail):
 
 
 def delegate_task(parent, goal=None, context=None, toolsets=None, role=None,
-                  label=None, tasks=None, **_extra):
+                  label=None, assigned_pages=None, tasks=None, **_extra):
     """并行起一批子 agent 跑任务,返回 `{"results":[...]}` 的 JSON 字符串。
 
     两种形态:顶层单个 `{goal,context?,toolsets?,role?,label?}`,或 `tasks` 数组批量。每次调用用一个
@@ -2179,8 +2849,14 @@ def delegate_task(parent, goal=None, context=None, toolsets=None, role=None,
         tasks = [tasks]
     if tasks is None:
         if goal or label or toolsets:
-            tasks = [{"goal": goal, "context": context, "toolsets": toolsets,
-                      "role": role, "label": label}]
+            tasks = [{
+                "goal": goal,
+                "context": context,
+                "toolsets": toolsets,
+                "role": role,
+                "label": label,
+                "assigned_pages": assigned_pages,
+            }]
         else:
             tasks = []
     if not isinstance(tasks, list) or not tasks:
@@ -2203,6 +2879,16 @@ def delegate_task(parent, goal=None, context=None, toolsets=None, role=None,
             "error": grounding_error,
             "code": "grounding_required",
             "retry": "先写入并 read_file 验证 plan/grounded-knowledge.md，再重试原委派。",
+        }, ensure_ascii=False)
+    image_error = _image_before_slide_error(parent, norm)
+    if image_error:
+        return json.dumps({
+            "error": image_error,
+            "code": "image_stage_required",
+            "retry": (
+                "先完成逐页可见主体扫描；有配图机会时先单独委派 Image Agent，"
+                "验收 assets/catalog.json 并把 ready asset_id 回填计划，再重试 Slide 委派。"
+            ),
         }, ensure_ascii=False)
     singleton_error = _reserve_singleton_roles(parent, norm)
     if singleton_error:

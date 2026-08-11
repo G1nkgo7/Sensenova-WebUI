@@ -1299,6 +1299,7 @@ def _engine_python() -> str | None:
     # inference project venv.  Prefer it over the host Python; the latter is
     # only a deployment fallback paired with ENGINE_SITE_PACKAGES.
     candidates.append(DISTILL_DIR / ".venv" / "bin" / "python")
+    candidates.append(DISTILL_DIR / ".venv" / "Scripts" / "python.exe")
     candidates.append(Path("/usr/bin/python3"))
     for python in candidates:
         if python.is_file() and os.access(python, os.X_OK):
@@ -1310,7 +1311,7 @@ def _prepend_path(value: str, *prefixes: Path) -> str:
     parts = [str(p) for p in prefixes if p]
     if value:
         parts.append(value)
-    return ":".join(parts)
+    return os.pathsep.join(parts)
 
 
 def _playwright_revisions() -> dict[str, str]:
@@ -1441,6 +1442,23 @@ def render_env(env: dict | None = None) -> dict:
     every engine job inherits that directory through LD_LIBRARY_PATH.
     """
     out = dict(env or {})
+    configured_python = out.get("PPTAGENT_ENGINE_PYTHON") or out.get("ENGINE_PYTHON")
+    engine_python = None
+    if configured_python:
+        candidate = Path(configured_python).expanduser().absolute()
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            engine_python = str(candidate)
+    engine_python = engine_python or _engine_python()
+    if engine_python:
+        # Preserve a virtualenv's executable path instead of resolving its
+        # symlink to the base interpreter.  Python uses the invoked venv path
+        # to discover pyvenv.cfg and the environment's installed packages.
+        engine_python = str(Path(engine_python).expanduser().absolute())
+        out["PPTAGENT_ENGINE_PYTHON"] = engine_python
+        out["PATH"] = _prepend_path(
+            out.get("PATH") or os.environ.get("PATH", ""),
+            Path(engine_python).parent,
+        )
     browser_cache, browser_exe = _browser_runtime(out)
     browser_lib_dirs = _browser_library_dirs(out)
     out["PPTAGENT_CHROMIUM_DEPS"] = str(CHROMIUM_DEPS_DIR)

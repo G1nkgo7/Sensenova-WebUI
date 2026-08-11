@@ -791,12 +791,13 @@ def _validate_render_quality(root: Path, expected: int | None) -> None:
             errors.append(f"slide_{key}: HTML changed after structured render")
         if _sha256_path(png) != record.get("png_sha256"):
             errors.append(f"slide_{key}: PNG changed outside canonical renderer")
-        # Older renderer snapshots may have persisted ``boxoverflow`` as a
-        # hard issue.  It is now an advisory bbox candidate: only current
-        # pixel/DOM evidence can turn it into a real repair.  Filtering here
-        # keeps historical decks editable without forcing a destructive
-        # shrink-to-clear cycle.
-        advisory_types = {"boxoverflow", "overlap", "crowded", "cjktypography", "contrast"}
+        # Older renderer snapshots may have persisted heuristic geometry or
+        # typography candidates as hard issues.  They are advisory now: only
+        # fresh pixel/DOM evidence can turn one into a real repair.  Filtering
+        # here keeps historical decks editable without a shrink-to-clear loop.
+        advisory_types = {
+            "boxoverflow", "overlap", "crowded", "cjktypography", "contrast",
+        }
         hard = [
             item for item in (record.get("hard_issues") or [])
             if str(item.get("type") or "").lower() not in advisory_types

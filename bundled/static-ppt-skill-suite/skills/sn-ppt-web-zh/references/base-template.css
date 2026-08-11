@@ -77,12 +77,15 @@
   --font-editorial-serif:"Playfair Display", "Noto Serif SC", serif;   /* 时尚、杂志、奢华编辑 */
   --font-classic-serif: "Cormorant Garamond", "Noto Serif SC", serif; /* 文艺、历史、精致拉丁展示 */
   --font-cn-display-serif:"ZCOOL XiaoWei", "Noto Serif SC", serif;    /* 中文人文/文化展示 */
-   --font-hand-en:       "Patrick Hand", "Caveat", cursive;             /* 英文手写(工整):漫画/手账批注,可读 */
-   --font-hand-en-neat:  "Architects Daughter", "Patrick Hand", cursive;/* 英文手写(更工整):建筑师手写体,清楚 */
-   --font-hand-en-casual:"Indie Flower", "Caveat", cursive;            /* 英文手写(随性但清楚):便签/涂鸦感 */
-   --font-hand-en-script:"Dancing Script", "Sacramento", cursive;       /* 英文连笔签名字体:封面签名、短引语 */
-   --font-hand-en-marker:"Kalam", "Shadows Into Light", cursive;        /* 英文马克笔/板书:批注、教学、海报 */
-   --font-mono:          "IBM Plex Mono", monospace;                     /* 等宽:代码/坐标/ID/技术眉签,不是所有数字的默认 */
+   --font-hand-en:       "Patrick Hand", "Caveat", "Noto Sans SC", cursive;             /* 英文手写(工整):漫画/手账批注,可读 */
+   --font-hand-en-neat:  "Architects Daughter", "Patrick Hand", "Noto Sans SC", cursive;/* 英文手写(更工整):建筑师手写体,清楚 */
+   --font-hand-en-casual:"Indie Flower", "Caveat", "Noto Sans SC", cursive;            /* 英文手写(随性但清楚):便签/涂鸦感 */
+   --font-hand-en-script:"Dancing Script", "Sacramento", "Noto Sans SC", cursive;       /* 英文连笔签名字体:封面签名、短引语 */
+   --font-hand-en-marker:"Kalam", "Shadows Into Light", "Noto Sans SC", cursive;        /* 英文马克笔/板书:批注、教学、海报 */
+   /* ★ 拉丁角色的中文兜底(2026-08-11):拉丁展示/等宽/手写体都不含中文字形,中文落进来时
+      浏览器会回退到系统里任意 CJK 字体(worker 上可能是卡通/手写体)→ 卡通字 + 度量漂移溢出。
+      在 generic 关键字前显式钉 Noto,使中文回退确定落到 Noto,创作渲染与交付渲染一致。 */
+   --font-mono:          "IBM Plex Mono", "Noto Sans SC", monospace;     /* 等宽:代码/坐标/ID/技术眉签,不是所有数字的默认;中文兜底 Noto,别落卡通体 */
   --font-display:       var(--font-title);                              /* 封面/hero 大标题;按主题设为 brush/heavy/display-serif 等 */
   --font-number:        var(--font-display);                            /* TODO 数字主声部:按 Style Lock 选 display/grotesque/serif/sans/mono；默认跟随本册展示字体 */
 

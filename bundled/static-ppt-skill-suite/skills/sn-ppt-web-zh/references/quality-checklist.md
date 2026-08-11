@@ -155,7 +155,7 @@
 - [ ] **P0 anti-slop 零命中**(精确清单见 `design-rules.md` §11「精确 anti-slop 清单」):没把 7 个靛蓝/紫 hex(`#6366f1`/`#4f46e5`/`#4338ca`/`#3730a3`/`#8b5cf6`/`#7c3aed`/`#a855f7`)当**顺手默认** accent(主题有意声明的不算);没有**无主题的**通用信任渐变(紫→蓝 / 蓝→青 / 靛→粉;有主题色彩故事的渐变不算命中);无 emoji 图标(✨🚀🎯⚡🔥💡📈🎨…);无编造指标("10× faster"/"99.9% uptime"/"3× more");无 filler(`lorem ipsum`/`feature one·two·three`/`placeholder text`);无圆角卡+左侧彩条 accent;无外部占位图 CDN(unsplash / placehold.co / picsum…)。
 - [ ] **uppercase 字距(all-caps-no-tracking)**:每条 `text-transform:uppercase`(含 inline `style=`)必带 `letter-spacing≥0.06em`(建议 0.08em)。无字距的全大写是头号业余 tell。〔中文别用 `uppercase`。〕
 - [ ] **display 负字距**:`≥48px` 的大标题带 `letter-spacing:-0.02em~-0.03em`(松垮的大字同样露怯;拉丁文,中文大标题不做过度负收紧)。
-- [ ] **中文字体语义(cjk-typography)**:同一句标题、结论、按钮或标签优先使用一个字体家族，强调词优先只改颜色/字重/字号/装饰线；卡通、手写、书法体只在合题场景且显式标记时使用；所有中文字体栈保留 Noto Sans/Serif SC 兜底。`render.py` 的 `cjkTypography` 仅作 advisory 定位；只有新鲜像素或 DOM 证明确有不可读、真实裁切/遮挡或错义时才阻断。
+- [ ] **中文字体语义(cjk-typography)**:同一句标题、结论、按钮或标签优先使用一个字体家族，强调词优先只改颜色/字重/字号/装饰线；卡通、手写、书法体只在合题场景且显式标记时使用；所有中文字体栈保留 Noto Sans/Serif SC 兜底。`render.py` 的 `cjkTypography` 是 advisory 线索，不要求机械清零；只有新鲜像素或 DOM 证明缺字、不可读、真实裁切/遮挡或语义角色明显错误时才阻止交付。
 - [ ] **对比度 gate(contrast-gate)**:正文对底 **≥4.5:1**、大字(>18px 或 14px 粗)**≥3:1**(可从 `base.css` 解析出的 token 色值算 WCAG 比,或在渲染图上取色比对)。不达标就把 text 用途换深一档(600 级)。
 - [ ] **每张 slide 有明确明度角色 + 明暗节奏(slide-theme / slide-rhythm)**:每页归位到「常规内容底 / 加深过渡底 / 满铺 hero」等已声明状态之一，体例全套统一。节奏变化服务章节和叙事高点，不为了打破连续次数随机换底；发现长段页面视觉状态没有变化且阅读疲劳时，再用同色系明度、图片或色场状态建立转折。
 - [ ] **骨架契约(layout-contract)**:`render.py ⚠ CUSTOM-BODY` / `⚠ ABS-LAYOUT` 必须为零;root 直下只用标准 `.slide-title` / `.slide-body` / `.slide-footer`,正文内容不得用 absolute/fixed 拼版。
@@ -175,5 +175,5 @@
 ## 怎么用(各角色对照)
 
 - **Slide Group**(`subagents/slide.md`):由同一个 Agent 按页序串行完成“单页首稿 → 单页渲染 → 单页 Vision → 必要修复复验”，当前页 ready 后才进入下一页；组末再用整组批量渲染检查亲缘性与变化。组末总览不能替代任何负责页面的单页像素自检。
-- **review subagent**(`subagents/review.md`):通过全册概览 + 自适应分组联系表覆盖所有页面,同时过「单页检查」与「整套检查」；一次建立问题账本,直接合并修复视觉问题,重渲变化页并用复验联系表看新像素。它是唯一 Review,不再拆分或重派第二个 Review。
-- **编排器**:规划期就用「单页检查·表达与内容逻辑」「整套检查·全篇结构」自检叙事与内容(规划期堵掉比渲染后返工便宜)；收尾只接受唯一 Review 的 `ready` 结论,不得覆盖 `blocked` 或另派 Slide/Review 绕过质量门。
+- **review subagent**(`subagents/review.md`):通过全册概览 + 自适应分组联系表覆盖所有页面,同时过「单页检查」与「整套检查」；一次建立问题账本,直接合并修复视觉问题,重渲变化页并用复验联系表看新像素。单次 Review 不反复清告警；有证据的硬伤交回原页组后，才允许新的 Review 复验，任务总计最多 3 次。
+- **编排器**:规划期就用「单页检查·表达与内容逻辑」「整套检查·全篇结构」自检叙事与内容(规划期堵掉比渲染后返工便宜)；Review blocked 后只按证据重派原页组，最多返修 2 次。达到预算后恢复最后验证版并带 warnings 交付可用成稿，不把 advisory 或收尾文本问题判成整项失败。

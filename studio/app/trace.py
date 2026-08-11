@@ -182,7 +182,7 @@ _PLAN_GROUP_RE = re.compile(
     r"^\s*-\s*production_group\s*[:：]\s*[`\"']?([A-Za-z0-9._-]+)", re.I | re.M,
 )
 _SLIDE_REF_RE = re.compile(r"(?:slide_|page_)0*(\d{1,3})(?=\D|$)", re.I)
-_PAGES_ARG_RE = re.compile(r"--pages(?:=|\s+)([0-9][0-9,\s]*)", re.I)
+_PAGES_ARG_RE = re.compile(r"--pages(?:=|[ \t]+)([0-9][0-9, \t]*)", re.I)
 
 
 def _agent_alias_from_task(task, fallback):

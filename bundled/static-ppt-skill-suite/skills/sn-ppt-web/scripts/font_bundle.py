@@ -476,6 +476,24 @@ def _generic_for(family: str) -> str:
     return "sans-serif"
 
 
+# Families whose subset actually carries CJK glyphs.  Any other delivery family
+# (Latin display / mono / English handwriting) must be followed by a bundled CJK
+# fallback in the :root stack, otherwise stray Chinese falls back to whatever CJK
+# font the viewer/worker happens to have (often a cartoon face) and the metric
+# mismatch between authoring and delivery renders pushes content past the footer.
+_CJK_COVERING = frozenset({
+    "Noto Sans SC", "Noto Serif SC", "Smiley Sans",
+    "Xiaolai", "LXGW WenKai", "Ma Shan Zheng",
+    "Zhi Mang Xing", "Long Cang", "Liu Jian Mao Cao",
+    "ZCOOL KuaiLe", "ZCOOL QingKe HuangYou", "ZCOOL XiaoWei",
+})
+
+
+def _covers_cjk(family: str) -> bool:
+    # User uploads have unknown coverage → always append a CJK fallback.
+    return family in _CJK_COVERING
+
+
 def _rename_subset_font(target: Path, delivery_family: str, weight: str, style: str) -> None:
     """Rename a modified subset so OFL Reserved Font Names are not reused."""
     from fontTools.ttLib import TTFont
@@ -681,7 +699,11 @@ def bundle_fonts(
     fallback_delivery = delivery_families["Noto Sans SC"]
     overrides = "\n".join(
         f"  {token}: {json.dumps(delivery_families[family])}, "
-        + (f"{json.dumps(fallback_delivery)}, " if family.startswith("User::") else "")
+        # Latin display / mono / English-handwriting / user subsets carry no CJK
+        # glyphs → append the bundled Noto CJK fallback so stray Chinese never
+        # falls through to a viewer/worker cartoon face (and both authoring and
+        # delivery renders resolve CJK to the same metrics, killing the overflow).
+        + (f"{json.dumps(fallback_delivery)}, " if not _covers_cjk(family) else "")
         + f"{_generic_for(family)};"
         for token, family in sorted(token_families.items())
     )
