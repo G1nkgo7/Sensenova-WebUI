@@ -377,7 +377,15 @@ def terminal(agent, command, background=False, timeout=None, workdir=None,
     if background:
         notes.append("[注] 本环境不支持 background,已前台执行")
     try:
-        r = subprocess.run(command, shell=True, cwd=cwd, capture_output=True, text=True, timeout=to)
+        r = subprocess.run(
+            command,
+            shell=True,
+            cwd=cwd,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=to,
+        )
     except subprocess.TimeoutExpired:
         return f"terminal 错误:命令超过 {to}s 超时"
     except Exception as e:

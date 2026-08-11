@@ -22,6 +22,7 @@ teacher 模型(Claude Opus)按 skills/sn-ppt-web 自主生成整套 HTML 幻灯�
 """
 import argparse
 import concurrent.futures as cf
+import errno
 import glob
 import hashlib
 import json
@@ -46,6 +47,35 @@ SKILL_BY_LANGUAGE = {
     "zh": "sn-ppt-web-zh",
     "en": "sn-ppt-web-en",
 }
+
+_BROKEN_STDIO_MARKERS = (
+    "bad file descriptor",
+    "init_sys_streams",
+    "can't initialize sys standard streams",
+)
+
+
+def _run_noninteractive(command, **kwargs):
+    """Run a background helper without inheriting a stale terminal stdin.
+
+    Long-running desktop sessions can outlive the PTY that launched Studio,
+    especially after macOS sleep/resume.  Python then may fail before the
+    helper script starts while initializing ``sys.stdin``.  Give every helper
+    a fresh DEVNULL stdin and retry that startup failure exactly once.
+    """
+    kwargs.setdefault("stdin", subprocess.DEVNULL)
+    for attempt in range(2):
+        try:
+            proc = subprocess.run(command, **kwargs)
+        except OSError as exc:
+            if attempt == 0 and exc.errno == errno.EBADF:
+                continue
+            raise
+        output = f"{getattr(proc, 'stdout', '') or ''}\n{getattr(proc, 'stderr', '') or ''}".lower()
+        if attempt == 0 and proc.returncode and any(marker in output for marker in _BROKEN_STDIO_MARKERS):
+            continue
+        return proc
+    raise RuntimeError("non-interactive subprocess retry exhausted")
 
 # 通用、薄的 base system(PPT 风味只有最后两行)。领域方法在 skills/,按需 read SKILL.md。
 BASE_SYSTEM = """\
@@ -406,7 +436,7 @@ def _delivery_audit(ws, expected):
     if not os.path.isfile(deck_py):
         return False, "缺少 deck.py，无法执行交付依赖审计"
     try:
-        proc = subprocess.run(
+        proc = _run_noninteractive(
             [sys.executable, deck_py, "audit", ws, "--expected", str(expected)],
             cwd=ws,
             capture_output=True,
@@ -447,8 +477,10 @@ def _v_pass(html_path, ws):
     tmp = tempfile.NamedTemporaryFile(prefix="vcheck_", suffix=".png", delete=False)
     tmp.close()
     try:
-        proc = subprocess.run([sys.executable, render_py, html_path, tmp.name],
-                              cwd=ws, capture_output=True, text=True, timeout=180)
+        proc = _run_noninteractive(
+            [sys.executable, render_py, html_path, tmp.name],
+            cwd=ws, capture_output=True, text=True, timeout=180,
+        )
         out = (proc.stdout or "") + "\n" + (proc.stderr or "")
         if "机检结论: 不过" in out:
             return False, out

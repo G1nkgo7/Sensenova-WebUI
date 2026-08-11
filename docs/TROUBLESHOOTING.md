@@ -77,6 +77,10 @@ curl "$SENSENOVA_MODEL_BASE_URL/models" \
 V1 调度器不再假设系统存在 Linux `/proc`：Linux 优先读取 `/proc`，macOS 使用 `ps`，Windows
 使用 PowerShell/CIM。升级旧包后只需重启 WebUI 服务进程，尚未启动的 queued 任务会由启动恢复逻辑重新调度。
 
+## macOS 休眠后任务耗时异常或收尾报 Bad file descriptor
+
+发布版会为后台引擎、渲染与交付审计提供独立的空标准输入，并对 Python 标准流初始化失败有限重试一次，避免旧终端失效导致已完成成稿被误判失败。`./start.sh` 在 macOS 上还会默认通过 `caffeinate -i` 防止空闲休眠；合盖仍可能暂停系统，长任务期间请保持机器处于唤醒状态。可设置 `SENSENOVA_KEEP_AWAKE=0` 关闭该保护。
+
 ## 附件解析或中文字体缺失
 
 普通执行 `./start.sh` 会在首次运行时安装完整附件解析环境和 OFL 字体。检查：

@@ -215,6 +215,7 @@ def _render_office_pages(path: Path, outdir: Path, stem: str, kind: str) -> tupl
         with tempfile.TemporaryDirectory() as tmp:
             r = subprocess.run(
                 [office, "--headless", "--convert-to", "pdf", "--outdir", tmp, str(path)],
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,

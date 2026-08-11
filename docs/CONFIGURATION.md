@@ -23,6 +23,7 @@ Shell 变量插值，因此不要写 `${HOME}`，请填写完整路径。
 | `STUDIO_DATA_DIR` | `./studio/data` | 数据库、任务、上传和工作区 |
 | `STUDIO_AGENT_MAX_TOKENS` | `40960` | 每轮最大 Token |
 | `STUDIO_MAX_PER_MODEL` | `0` | `0` 表示不按模型限制并发 |
+| `SENSENOVA_KEEP_AWAKE` | `1` | macOS 使用 `caffeinate -i` 防止空闲休眠；其他系统忽略 |
 | `STUDENT_TEMPERATURE` | `0.3` | 静态生成温度 |
 
 ## sn-ppt-web Harness + 双语冻结 Skill

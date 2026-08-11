@@ -11,6 +11,7 @@ NEVER re-enqueued while alive, which would spawn a second engine fighting over
 the same run_dir. Only decks with no live process and no result get requeued.
 """
 import asyncio
+import errno
 import glob
 import json
 import os
@@ -35,6 +36,29 @@ _workers: list = []
 _scheduled: set = set()    # unbounded 模式下防止同一 Deck 被重复派发
 _loop = None               # sync FastAPI endpoint 通过它安全投递到 ASGI loop
 _user_canceled: set = set()   # 用户主动取消的 deck:收尾时显示「已取消」而非报错
+
+_BROKEN_STDIO_MARKERS = (
+    "bad file descriptor",
+    "init_sys_streams",
+    "can't initialize sys standard streams",
+)
+
+
+def _run_noninteractive(command, **kwargs):
+    """Run a non-interactive child with isolated stdin and one startup retry."""
+    kwargs.setdefault("stdin", subprocess.DEVNULL)
+    for attempt in range(2):
+        try:
+            result = subprocess.run(command, **kwargs)
+        except OSError as exc:
+            if attempt == 0 and exc.errno == errno.EBADF:
+                continue
+            raise
+        output = f"{getattr(result, 'stdout', '') or ''}\n{getattr(result, 'stderr', '') or ''}".lower()
+        if attempt == 0 and result.returncode and any(marker in output for marker in _BROKEN_STDIO_MARKERS):
+            continue
+        return result
+    raise RuntimeError("non-interactive subprocess retry exhausted")
 
 
 def _set_status(deck_id, status, **fields):
@@ -97,7 +121,7 @@ def _matching_engine_pids(deck_id) -> set[int]:
 
     if command:
         try:
-            result = subprocess.run(
+            result = _run_noninteractive(
                 command,
                 check=False,
                 capture_output=True,
@@ -316,7 +340,7 @@ def _ensure_static_delivery(row, run_dir: Path) -> str | None:
         expected = str(len(slide_files))
 
         def run_deck(command: str):
-            return subprocess.run(
+            return _run_noninteractive(
                 [delivery_python, str(deck_script), command, str(run_dir), "--expected", expected],
                 cwd=run_dir,
                 text=True,
@@ -363,7 +387,7 @@ def _ensure_static_delivery(row, run_dir: Path) -> str | None:
                 command = [delivery_python, "-c", bootstrap, str(script), str(run_dir)]
             else:
                 command = [delivery_python, str(script), "slides", "present.html"]
-            result = subprocess.run(
+            result = _run_noninteractive(
                 command,
                 cwd=run_dir,
                 text=True,
@@ -580,12 +604,20 @@ async def _process(deck_id):
     child_env["THINKING"] = child_env["STUDIO_EFFECTIVE_THINKING"]
     child_env = engine.render_env(child_env)
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *engine.runner_cmd(job_path),
-            stdout=logf, stderr=asyncio.subprocess.STDOUT,
-            cwd=str(engine.DISTILL_DIR), env=child_env,
-            start_new_session=True,   # 独立会话:studio 重启/被杀不会连带 TERM 引擎(曾致 exit=143 秒败)
-        )
+        for spawn_attempt in range(2):
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *engine.runner_cmd(job_path),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=logf, stderr=asyncio.subprocess.STDOUT,
+                    cwd=str(engine.DISTILL_DIR), env=child_env,
+                    start_new_session=True,   # 独立会话:studio 重启/被杀不会连带 TERM 引擎(曾致 exit=143 秒败)
+                )
+                break
+            except OSError as exc:
+                if spawn_attempt == 0 and exc.errno == errno.EBADF:
+                    continue
+                raise
         _running[deck_id] = proc
         spawn_ts = time.time()
         waiter = asyncio.ensure_future(proc.wait())

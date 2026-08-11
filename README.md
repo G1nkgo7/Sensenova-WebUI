@@ -126,6 +126,7 @@ ZIP 不包含账号库、历史任务、上传附件、生成结果、密钥、�
 - macOS 13+（Intel / Apple Silicon）。
 - Python 3.12，推荐通过 Homebrew 安装：`brew install python@3.12`。
 - 生成链路会调用 POSIX shell，macOS 可原生运行。
+- 启动器默认使用系统自带的 `caffeinate -i` 防止空闲休眠暂停长任务；合盖仍会触发系统休眠。
 - **这是当前唯一完成完整实测的桌面系统。**
 
 ### Linux
@@ -269,6 +270,12 @@ docker compose down
 | `--check` | 关闭 | 脱敏输出有效配置，不启动服务 |
 
 配置优先级：**命令行参数 > Shell 环境变量 > `.env` > 内置默认值**。
+
+macOS 默认启用空闲休眠保护。如需关闭，可在 `.env` 设置：
+
+```dotenv
+SENSENOVA_KEEP_AWAKE=0
+```
 
 部署前检查：
 

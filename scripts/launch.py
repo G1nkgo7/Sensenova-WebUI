@@ -354,6 +354,12 @@ def main() -> int:
             "search_key": _mask(os.environ.get("SENSENOVA_SEARCH_API_KEY", "")),
         },
     }
+    keep_awake = (
+        sys.platform == "darwin"
+        and _flag_default("SENSENOVA_KEEP_AWAKE", True)
+        and bool(shutil.which("caffeinate"))
+    )
+    public["macos_keep_awake"] = keep_awake
     if args.check:
         print(json.dumps(public, ensure_ascii=False, indent=2))
         return 0
@@ -364,6 +370,11 @@ def main() -> int:
     ]
     if args.reload:
         command.append("--reload")
+    if keep_awake:
+        # Prevent idle sleep from pausing long generation jobs. Closing the
+        # laptop lid can still suspend macOS and is outside process control.
+        command = [shutil.which("caffeinate"), "-i", *command]
+        print("[SenseNova Present] macOS idle-sleep prevention is active (caffeinate -i)", flush=True)
     print(f"[SenseNova Present] Ready at {public['url']} (language={args.language}, edition={args.edition})")
     try:
         return subprocess.call(command, cwd=STUDIO_ROOT, env=os.environ.copy())
