@@ -128,7 +128,7 @@
 - quality-checklist.md：单页检查
 
 ## 来源
-- <屏显事实对应来源；无外部来源则写 user-provided / none>
+- <内部溯源字段，仅供讲稿引用与自查，**绝不上屏**；写屏显事实对应来源，无外部来源则写 user-provided / none。文件路径 / 章节锚点（如 `research/research.md §二.4`）只能留在此处，绝不作为页面 source 印出>
 
 ## 口语讲稿
 <可直接朗读，不机械复读屏显，不朗读来源>

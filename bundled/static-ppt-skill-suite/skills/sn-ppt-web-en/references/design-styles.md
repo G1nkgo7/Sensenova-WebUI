@@ -110,3 +110,4 @@ Write a short, operational style lock containing:
 - Keep ordinary pages quieter so anchor pages retain contrast.
 - If the subject could be swapped without changing the deck, the system is too generic.
 - If the style compromises readability or factual clarity, revise the style rather than the evidence.
+

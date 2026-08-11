@@ -69,3 +69,4 @@ The Orchestrator must not directly edit `slides/slide_NN.html`.
 - Every changed page has a fresh inspected final PNG.
 - Fonts, render freshness, `speech.md`, and `present.html` pass again.
 - A repaired deck is judged by its latest Review contract, never by a stale pre-repair contract.
+

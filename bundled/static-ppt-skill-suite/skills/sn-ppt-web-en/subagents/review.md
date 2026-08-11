@@ -39,15 +39,14 @@ The order of quality judgment is: **fresh final PNG / Vision → DOM and compute
    python ${SKILL_DIR:-skills/sn-ppt-web-en}/scripts/deck.py prepare . --expected <total_pages>
    ```
 
-6. Batch render target pages at once, then generate a focus contact sheet and inspect the repaired pixels for regression:
+6. Batch render target pages at once, then generate a focus contact sheet and inspect the new pixels:
 
    ```bash
    python ${SKILL_DIR:-skills/sn-ppt-web-en}/scripts/render.py --batch . --pages NN,NN
    python ${SKILL_DIR:-skills/sn-ppt-web-en}/scripts/deck.py contact . --focus NN,NN
    ```
 
-7. Synchronize the affected scripts and sources, then run `deck.py build . --expected <total_pages>` to complete fonts, player, and delivery artifacts. Build may subset fonts, update `base.css`, and rerender pages, so the pre-build inspection is not final delivery evidence.
-8. Regenerate `renders/review-contact.json` and the final contact sheets, inspect every post-build final pixel in manifest order, update the canonical ledgers, and immediately return the structured contract. Do not edit visual files or run render/prepare/build after this final inspection.
+7. Run `deck.py build . --expected <总页数>` to complete the wrap-up of scripts, fonts, player, and contact sheets.
 
 Simple edits do not generate a full-deck issue ledger and do not dispatch other agents; you still need to use overview/focus to confirm that local modifications have not broken cross-page consistency.
 
@@ -91,10 +90,9 @@ Cross-check image processing against `assets/catalog.json`, asset contact sheets
    For semantic visual issues, prioritize restoring the page-by-page plan: correct contradictory labels and directions, supplement arrows/legends, expand the explanatory subject, and reconstruct into domain-recognizable diagrams using existing facts. If the page's original plan did not require the decorative image, delete it and let the main table/main evidence correctly fill the space; if the repair must add unplanned facts or acquire new assets, return `blocked`, and do not fabricate.
 2. After on-screen copy or font tokens change, synchronize the corresponding plan first, then run `deck.py prepare`.
 3. After all modifications are completed, perform only one batch rendering: if `base.css` or the font package has been modified, batch the entire deck; otherwise, render only the changed pages. Enter Vision only after the rendering command succeeds and the timestamp of the target PNG is later than the source file.
-4. Use a newly generated focus contact sheet to view the changed pages; open the single-page PNG just re-rendered in this round when necessary. This inspection confirms that the repair did not regress the page; it is not final delivery evidence. The backup version must be compared simultaneously: if warnings are merely reduced but the main subject is squashed, information is deleted, or the negative space/center of gravity/semantic visuals are worse, the new version is still judged as degraded. If the new version is worse, restore the relevant pages from the backup and perform another corresponding batch rendering. Do not continue to view the previous round's PNGs or focus images that have not been re-generated.
+4. Use a newly generated focus contact sheet to view the changed pages; open the single-page PNG just re-rendered in this round when necessary. The backup version must be compared simultaneously: if warnings are merely reduced but the main subject is squashed, information is deleted, or the negative space/center of gravity/semantic visuals are worse, the new version is still judged as degraded. If the new version is worse, restore the relevant pages from the backup and perform another corresponding batch rendering. Do not continue to view the previous round's PNGs or focus images that have not been re-generated.
 5. Perform at most 1 round of refine: merge all confirmed critical defects into a single batch of repairs and re-verify, do not open a second round, and do not initiate modifications for advisories. If real critical defects still exist after re-verification, `blocked`; if there are only advisories, record them and return `ready`.
-6. After repair confirmation, synchronize the scripts/sources of the affected pages, then run `deck.py build` once. Build may subset fonts, update `base.css`, and rerender pages, so no pre-build Vision call can certify the final delivery pixels.
-7. After build succeeds, regenerate `renders/review-contact.json` and all final contact sheets. Inspect every post-build final pixel in manifest order, opening final single-page PNGs when needed. Update `_trace/review-issues.md` and, when factual verification applies, `_trace/content-fidelity.md`; then immediately return the structured contract. Do not modify visual files or run render/prepare/build after this final inspection.
+6. After the pixels are finalized, synchronize the scripts/sources of the affected pages, and run `deck.py build` once.
 
 Only when Vision is actually called to view the final PNG can `final_pixels_inspected: yes` be filled. If the current tool interface lacks Vision, do not use reading HTML, file sizes, cropping commands, or the `clean` summary of render to masquerade as pixel re-verification; return `blocked` and truthfully state the missing capability.
 

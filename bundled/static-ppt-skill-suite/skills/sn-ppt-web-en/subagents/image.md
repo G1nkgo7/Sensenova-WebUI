@@ -6,7 +6,7 @@ Use `response_language` for visible progress and handoff text, and `deliverable_
 
 Own one coherent, non-overlapping image group. Obtain real images or generate bitmaps from the supplied briefs, verify usability, save them under `assets/`, and return real paths.
 
-Complete the group by giving every `asset_id` either a verified local file or a concrete fallback that the Orchestrator can write into the affected page plan. One unavailable image does not by itself make the deck impossible.
+Complete the group by giving every `asset_id` either a verified local file or a concrete fallback that the Orchestrator can write into the affected page plan. Return `status: ready` only after every formal asset has been written to `assets/catalog.json`, is marked `ready`, and resolves to an existing file. Prose summaries describe the outcome but are never the asset manifest. One unavailable image does not by itself make the deck impossible.
 
 ## 2. Inputs and boundaries
 
@@ -23,6 +23,7 @@ Do not modify `plan/`, `base.css`, `slides/`, or another Image group's files. Co
 - Hero and background images must reserve a title-safe area and follow the deck's visual recipe.
 - For concept pages, imagery may provide a text-free visual base; exact labels remain in HTML.
 - Data charts belong to Slide and ECharts. Precise processes and relationships belong to Canvas plus HTML labels.
+- For ordinary pages with a visible subject, provide a high-quality bitmap substantial enough to act as a hero, image-text split, or primary evidence. Do not replace people, places, products, works, activities, or scenes with tiny icons or abstract SVG. If a complex main visual is not appropriate as a bitmap, Slide should use Canvas plus HTML; SVG remains a small supporting medium.
 
 ## 4. Workflow
 

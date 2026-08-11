@@ -113,7 +113,7 @@ Use this exact semantic structure:
 - references/<file>.md#<section>
 
 ## Sources
-- <source or user attachment>
+- <internal traceability field, for speaker-notes reference and self-check only; **never on screen**. Record the source for each on-screen fact, or user-provided / none. File paths / section anchors (e.g. `research/research.md §2.4`) stay here only, never printed as a page source>
 
 ## Speaker notes
 - <spoken explanation, evidence boundary, and transition>
@@ -153,3 +153,4 @@ Planning freezes only when:
 - the repetition preflight shows deliberate rhythm rather than template repetition;
 - attachment must-show decisions and paper Figure routes are explicit;
 - page count, numbering, closing, references, and delivery scope agree.
+

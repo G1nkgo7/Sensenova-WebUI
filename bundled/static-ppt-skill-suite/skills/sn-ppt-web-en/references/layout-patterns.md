@@ -164,3 +164,4 @@ The action must serve the subject, recur as a controlled family, and never sacri
 - Let content determine height; avoid fixed boxes that create empty interiors.
 - Prefer fewer, larger, clearer elements to many small cards.
 - Inspect the page at full size and in the contact sheet before acceptance.
+

@@ -8,6 +8,14 @@ You are responsible for only one Production group. Pages within the group should
 
 Completion means: every page in this group conforms to the page-by-page plan, there is a shared design DNA and clear variation within the group, all final PNGs have been actually viewed, and critical flaws are cleared or truthfully marked as blocked.
 
+### ★ On-screen red lines (audience-facing; a violation is a critical flaw, higher priority than any layout preference)
+
+Both the slide and the speaker notes are **finished artifacts for the audience** — put only what the audience needs. The three rules below are hard red lines; check each while writing HTML:
+
+1. **No sources on screen.** `Source:`, `来源：`, citations, references, and provenance go only into `speech.md` (speaker notes) — **never in the slide HTML**. The only exception is a dedicated references page the plan explicitly declares. Do not hang a source line in every footer "for rigor".
+2. **Never surface internal hidden state.** File paths (`research/research.md`, `plan/…`), section anchors (`§2.3`), evidence IDs, production group, assumptions, production status, fake archive numbers — these are internal production data and **must not appear in the HTML at all**. Printing `research/research.md §2.4` as a "source" on the page is a serious violation.
+3. **Do not force body-page furniture onto cover / closing / transition pages.** Cover (`.slide--cover`), closing (`.slide--cover.slide--closing`), and transition/section pages **omit by default** `.slide-footer`, `.page-no`, the `border-top` divider rule, org notes, and `SCENE/COVER/END` labels. These special pages carry one dominant focus + generous whitespace; footer/page-number is body-page furniture and looks cheap on the first/last page. Page numbers and footers belong only to ordinary content pages.
+
 ## 2. Input, Read, and Write Boundaries
 
 Complete reading of:
@@ -22,6 +30,8 @@ Complete reading of:
 Do not scan all references, and do not read pages outside the group. If any selected file or chapter displays a continuation offset or truncation prompt, you must continue reading until the end. When the page-by-page plan marks an attached image as `must-show`, you must actually reference the material/derived asset provided by the plan; you cannot merely extract information from it and replace the original image with CSS, SVG, or redrawn graphics.
 
 When the page-by-page plan declares a material as a paper `figure-crop`, you can only reference the official assets of `derivative_kind: material_figure_crop` in the catalog. You must not shrink a whole-page paper PNG into an image box and then use `object-fit/object-position/overflow:hidden` to pretend that a Figure has been cropped out; when the original appearance of the page is required, it must be explicitly declared as `page-facsimile` by the plan, and the page copy must not mislabel it as the Figure itself.
+
+You have no image search, image generation, or network acquisition capability. Use only images that are marked `ready` in `assets/catalog.json` and have been backfilled into this group's page plans under stable `asset_id` values. Do not guess paths, reuse candidate/discarded assets, invoke image tools, or introduce new images. If a required formal asset is missing, its path does not exist, or its crop contract is not frozen, return `blocked` to Image/Orchestrator; do not bypass the gate with SVG, colored blocks, or placeholders.
 
 Only write to `slides/slide_NN.html` and `renders/slide_NN.png` of this group. Do not modify facts, plans, `base.css`, scripts, or other page groups.
 

@@ -46,7 +46,7 @@
 | `--font-hand-en-casual` | Indie Flower | 随性英文手写；Google Fonts / OFL |
 | `--font-hand-en-script` | Dancing Script，Sacramento | 英文连笔、签名和短引语；Google Fonts / OFL |
 | `--font-hand-en-marker` | Kalam，Shadows Into Light | 英文马克笔、板书和教学批注；Google Fonts / OFL |
-| `--font-mono` | IBM Plex Mono | 代码、坐标、ID、技术眉签；IBM/Google Fonts / OFL |
+| `--font-mono` | IBM Plex Mono | **纯拉丁**代码、坐标、ID、真实编号、纯拉丁技术眉签；无中文字形，**中文一律不用**；IBM/Google Fonts / OFL |
 | `--font-number` | 由 Style Lock 映射 | Hero 数字、KPI、章节序号的数字主声部 |
 
 ## 3. 使用规则

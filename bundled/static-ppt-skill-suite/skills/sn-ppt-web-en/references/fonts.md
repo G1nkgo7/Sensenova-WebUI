@@ -13,7 +13,7 @@ Use only fonts that are bundled with a redistribution license, installed by this
 | Display/title | `--font-display` | Noto Sans/Serif SC; Unbounded, Syne, Archivo, Fraunces, or another registered display role when the occasion supports it | Covers, dividers, large statements |
 | Body | `--font-body` | Noto Sans SC, Noto Serif SC | Paragraphs, tables, labels |
 | Numbers | `--font-number` | IBM Plex Sans, Archivo, DM Sans | KPIs and numeric hierarchy |
-| Mono/data | `--font-mono` | IBM Plex Mono | Code, coordinates, technical labels |
+| Mono/data | `--font-mono` | IBM Plex Mono | **Pure-Latin** code, coordinates, IDs, real serial numbers; no CJK glyphs — **never use for Chinese** |
 | Annotation | `--font-annotation` | Body role; Xiaolai/LXGW WenKai or a registered handwriting role when intentional | Captions, sources, notes, short expressive quotations |
 
 Always include a generic fallback at the end of a stack. A family name alone does not prove the font exists or is distributable.

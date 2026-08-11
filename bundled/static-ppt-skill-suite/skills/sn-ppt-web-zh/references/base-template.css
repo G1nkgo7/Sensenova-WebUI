@@ -85,7 +85,7 @@
    /* ★ 拉丁角色的中文兜底(2026-08-11):拉丁展示/等宽/手写体都不含中文字形,中文落进来时
       浏览器会回退到系统里任意 CJK 字体(worker 上可能是卡通/手写体)→ 卡通字 + 度量漂移溢出。
       在 generic 关键字前显式钉 Noto,使中文回退确定落到 Noto,创作渲染与交付渲染一致。 */
-   --font-mono:          "IBM Plex Mono", "Noto Sans SC", monospace;     /* 等宽:代码/坐标/ID/技术眉签,不是所有数字的默认;中文兜底 Noto,别落卡通体 */
+   --font-mono:          "IBM Plex Mono", "Noto Sans SC", monospace;     /* 等宽:纯拉丁代码/坐标/ID/编号,中文一律不用;中文兜底 Noto 只防意外落卡通体 */
   --font-display:       var(--font-title);                              /* 封面/hero 大标题;按主题设为 brush/heavy/display-serif 等 */
   --font-number:        var(--font-display);                            /* TODO 数字主声部:按 Style Lock 选 display/grotesque/serif/sans/mono；默认跟随本册展示字体 */
 
