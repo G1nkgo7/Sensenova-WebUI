@@ -626,6 +626,33 @@ def _coverage_error(ws, entry, catalog):
     return ""
 
 
+def _disk_material_worker_ready(ws, base_label):
+    """Persisted-truth fallback for a material worker's acceptance.
+
+    Mirrors the Image→Slide gate fallback: a stale in-memory ``clean`` flag must
+    not block a material stage that was genuinely completed (a re-run or a
+    corrected handoff on disk).  Accept the base label or any ``_rN`` retry whose
+    durable handoff reports clean + ready + complete coverage.
+    """
+    pattern = os.path.join(ws, "_trace", "subagents", "*", "handoff.json")
+    for path in glob.glob(pattern):
+        label = os.path.basename(os.path.dirname(path))
+        if re.sub(r"_r\d+$", "", str(label)) != base_label:
+            continue
+        try:
+            with open(path, encoding="utf-8") as stream:
+                payload = json.load(stream)
+        except (OSError, ValueError, TypeError):
+            continue
+        contract = payload.get("contract") or {}
+        coverage = str(contract.get("coverage") or "").strip().lower()
+        if (bool(payload.get("clean"))
+                and str(contract.get("status") or "").lower() == "ready"
+                and coverage.startswith("complete")):
+            return True
+    return False
+
+
 def _material_acceptance(ws, worker_recs):
     """Require lossless coverage and a summary ledger for every attachment.
 
@@ -646,7 +673,12 @@ def _material_acceptance(ws, worker_recs):
         coverage = str(contract.get("coverage") or "").strip().lower()
         if (not worker.get("clean") or contract.get("status") != "ready"
                 or not coverage.startswith("complete")):
-            bad_contracts.append(label)
+            # In-memory worker_recs freeze the clean flag; a later correction or
+            # re-run persists to handoff.json.  Consult that durable truth before
+            # rejecting, so a genuinely complete material stage is not blocked by
+            # a stale in-memory record.
+            if not _disk_material_worker_ready(ws, label):
+                bad_contracts.append(label)
     if bad_contracts:
         return False, f"Material 未返回 ready/complete: {bad_contracts[:5]}"
 

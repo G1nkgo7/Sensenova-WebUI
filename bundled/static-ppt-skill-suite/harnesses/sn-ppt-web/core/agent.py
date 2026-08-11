@@ -1930,9 +1930,22 @@ def _build_child(parent, task):
     return child, name
 
 
+# A transparent-subject REQUIREMENT, not a mention of the word "transparent".
+# The plan/goal expresses the requirement with the authoritative field
+# ``subject_only: true`` / ``presentation: subject-only`` or an explicit cutout
+# instruction.  Matching the bare word ``transparent`` false-fires on physical
+# material descriptions ("transparent acrylic water guides") and on the contract
+# field name ``transparent_assets`` that every image task echoes back — both of
+# which wrongly demanded an Alpha cutout and blocked Slide dispatch (deck 449).
 _TRANSPARENCY_REQUEST_RE = re.compile(
-    r"(?i)(?:subject[_ -]?only\s*[:=]\s*true|expect[_ -]?transparent\s*[:=]\s*true|"
-    r"transparent(?:[-_ ]background)?|alpha\s+channel|透明背景|主体透明|透明元素|抠图|去背)"
+    r"(?i)(?:"
+    r"subject[_ -]?only\s*[:=]\s*true"
+    r"|presentation\s*[:=]\s*[`'\"]?subject[_ -]?only"
+    r"|expect[_ -]?transparent\s*[:=]\s*true"
+    r"|needs?[_ -]?(?:transparent|cutout|alpha)\s*[:=]\s*true"
+    r"|transparent[_ -]background\s+(?:required|needed|必须|必需)"
+    r"|主体透明|透明背景素材|需要抠图|需要去背|抠图交付"
+    r")"
 )
 _TRANSPARENT_ASSETS_RE = re.compile(
     r"(?im)^\s*transparent_assets\s*:\s*(.+?)\s*$"
@@ -2399,6 +2412,31 @@ def _catalog_asset_error(ws, required_ids):
     return None
 
 
+def _disk_image_stage_ready(ws):
+    """Persisted-truth fallback for the Image→Slide gate.
+
+    ``parent.worker_recs`` freezes each worker's ``clean`` flag at completion.
+    When an Image stage is corrected afterwards (a re-run image-finalize worker,
+    or a repaired ``handoff.json``), the in-memory record stays stale.  This reads
+    the durable per-worker ``handoff.json`` files so a genuinely ready image stage
+    can clear the gate without the orchestrator hand-editing memory.
+    """
+    pattern = os.path.join(ws, "_trace", "subagents", "*", "handoff.json")
+    for path in glob.glob(pattern):
+        label = os.path.basename(os.path.dirname(path))
+        if not str(label).lower().startswith("image"):
+            continue
+        try:
+            with open(path, encoding="utf-8") as stream:
+                payload = json.load(stream)
+        except (OSError, ValueError, TypeError):
+            continue
+        status = str((payload.get("contract") or {}).get("status") or "").lower()
+        if bool(payload.get("clean")) and status == "ready":
+            return True
+    return False
+
+
 def _image_before_slide_error(parent, tasks):
     """Enforce Image → manifest → Slide ordering at dispatch time."""
     kinds = {_task_kind(task.get("label"), task.get("goal")) for task in tasks}
@@ -2440,6 +2478,12 @@ def _image_before_slide_error(parent, tasks):
                 (worker.get("contract") or {}).get("status") or ""
             ).lower() == "ready"
         ]
+        # In-memory worker_recs freeze the clean flag at completion time.  A later
+        # correction (a re-run image-finalize, or a fixed handoff.json on disk)
+        # must still be able to clear this gate without hand-editing memory.  Fall
+        # back to the persisted handoff truth before blocking.
+        if not ready_workers and _disk_image_stage_ready(parent.ws):
+            ready_workers = ["<disk-handoff>"]
         if not ready_workers:
             return (
                 "计划存在配图机会，但尚无完成且 status=ready 的 Image Agent；"
