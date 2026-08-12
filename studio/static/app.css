@@ -1433,7 +1433,7 @@ html[data-theme="dark"] .user-menu .user-menu-font-control #font-trigger.active 
 
 .frame.sel img, .frame.sel .ph { box-shadow: 0 0 0 2.5px #ff8c32, 0 4px 14px rgba(255, 122, 40, .25); }
 @keyframes develop {
-  from { opacity: 0; transform: scale(.96); filter: saturate(.4) brightness(1.15); }
+  from { opacity: 0; filter: saturate(.4) brightness(1.15); }
   60%  { filter: saturate(.85) brightness(1.04); }
   to   { opacity: 1; transform: none; filter: none; }
 }
