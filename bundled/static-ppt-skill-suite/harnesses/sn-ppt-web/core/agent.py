@@ -1127,6 +1127,47 @@ def _run_tools(agent, tool_uses, turn, tool_log):
     return results
 
 
+_EXACT_REPEAT_GUARD_TOOLS = {
+    "read_file", "search_files", "terminal",
+    "web_search", "web_extract", "fetch_image",
+}
+_EXACT_REPEAT_NUDGE_AT = 3
+_EXACT_REPEAT_STOP_AT = 6
+
+
+def _exact_tool_repeat_count(agent, tool_uses):
+    """Count consecutive identical read/command turns and reset on progress.
+
+    A weak model can keep replaying one malformed shell search even after the
+    result has been returned. Total-count guards are too broad because a build
+    may legitimately be rerun after an edit; consecutive equality captures the
+    actual no-progress loop without penalizing that workflow.
+    """
+    if not tool_uses or any(tu.name not in _EXACT_REPEAT_GUARD_TOOLS for tu in tool_uses):
+        agent._exact_repeat_signature = None
+        agent._exact_repeat_count = 0
+        return 0
+    signature = tuple(
+        (
+            str(tu.name or ""),
+            json.dumps(
+                tu.input if isinstance(tu.input, dict) else {},
+                ensure_ascii=False,
+                sort_keys=True,
+                default=str,
+            ),
+        )
+        for tu in tool_uses
+    )
+    if signature == getattr(agent, "_exact_repeat_signature", None):
+        count = int(getattr(agent, "_exact_repeat_count", 0) or 0) + 1
+    else:
+        count = 1
+    agent._exact_repeat_signature = signature
+    agent._exact_repeat_count = count
+    return count
+
+
 def run_loop(agent):
     """纯 ReAct 循环:模型 → 工具 → 模型,直到模型不再调用工具(自然收尾)或到 max_turns。
     不替模型生成任务产物，也不在 max_turns 时强制总结；只对无 text/tool 的退化采样做有限重采，
@@ -1285,6 +1326,30 @@ def run_loop(agent):
             break
 
         _tool_content = _run_tools(agent, tool_uses, turn, tool_log)
+        exact_repeat_count = _exact_tool_repeat_count(agent, tool_uses)
+        if (
+            _EXACT_REPEAT_NUDGE_AT <= exact_repeat_count < _EXACT_REPEAT_STOP_AT
+            and isinstance(_tool_content, list)
+        ):
+            language = str(getattr(agent, "prompt_language", "zh") or "zh").lower()
+            repeated_name = str(tool_uses[0].name or "tool")
+            repeat_feedback = (
+                f"停滞提醒：你已连续 {exact_repeat_count} 次提交完全相同的 "
+                f"{repeated_name} 调用，工具结果已经返回。禁止再次原样重试。"
+                "请根据现有结果改用 search_files/read_file、修正参数，或立即进入下一项实质任务；"
+                "编排器若已掌握规划合同，应开始写计划并委派 Slide Group。"
+                if language != "en" else
+                f"Stall warning: you submitted the exact same {repeated_name} call "
+                f"{exact_repeat_count} consecutive times and its result was already returned. "
+                "Do not retry it unchanged. Use search_files/read_file, correct the arguments, "
+                "or move to the next substantive task. An orchestrator that has the planning "
+                "contract should write the plan and delegate Slide Groups now."
+            )
+            _tool_content = _tool_content + [{"type": "text", "text": repeat_feedback}]
+            agent.log(
+                f"连续重复工具保护：第 {exact_repeat_count} 次相同 {repeated_name}，"
+                "已把纠偏反馈回灌给当前 Agent。"
+            )
         recovered_review_contract = _review_ledger_contract(agent)
         review_recovery = _blocking_review_failure(agent)
         blocked_no_progress = sum(
@@ -1315,7 +1380,11 @@ def run_loop(agent):
             signatures[signature] = int(signatures.get(signature, 0)) + 1
             if signatures[signature] >= 3:
                 repeated_calls += 1
-        stalled = int(getattr(agent, "_blocked_no_progress", 0) or 0) >= 2 or repeated_calls
+        stalled = (
+            int(getattr(agent, "_blocked_no_progress", 0) or 0) >= 2
+            or repeated_calls
+            or exact_repeat_count >= _EXACT_REPEAT_STOP_AT
+        )
         finalization_only = bool(getattr(agent, "_finalization_only", False))
         label_lower = str(getattr(agent, "label", "") or "").lower()
         finalization_role = next(
