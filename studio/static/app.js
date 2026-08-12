@@ -2947,7 +2947,7 @@ function syncTaskConfig() {
 
 function renderStatus(p, phase) {
   delete $("#ed-status").dataset.dynamicChromeKey;
-  const cls = p.status === "completed" ? "ph-done" : (["failed", "rejected", "interrupted"].includes(p.status) ? "ph-failed" : "");
+  const cls = p.status === "completed" ? "ph-done" : (["failed", "rejected"].includes(p.status) ? "ph-failed" : "");
   const act = (!["completed", "failed", "rejected", "interrupted"].includes(p.status) && actText(p)) || "";
   const badgeLabel = p.status === "interrupted"
     ? STATUS_LABEL.interrupted
@@ -5899,6 +5899,7 @@ function agentTimingBadge(timing) {
   const running = timing.status === "running";
   const failed = timing.status === "failed";
   const waiting = timing.status === "waiting";
+  const interrupted = timing.status === "interrupted";
   const parts = [];
   if (started) parts.push(`<span>${escapeHtml(started.text)} 发起</span>`);
   if (finished) parts.push(`<span>${escapeHtml(finished.text)} 完成</span>`);
@@ -5908,7 +5909,7 @@ function agentTimingBadge(timing) {
   if (finishedFull) titleParts.push(`完成：${finishedFull.text}`);
   if (duration) titleParts.push(`${running ? "已进行" : "耗时"}：${duration}`);
   titleParts.push("并行 Agent 的时间可能重叠");
-  return `<time class="orch-duration orch-stage-time${running ? " running" : ""}${failed ? " failed" : ""}${waiting ? " waiting" : ""}" datetime="${escapeHtml(started?.iso || finished?.iso || "")}" title="${escapeHtml(titleParts.join("；"))}">${parts.join("<span class=\"orch-time-separator\">·</span>")}</time>`;
+  return `<time class="orch-duration orch-stage-time${running ? " running" : ""}${failed ? " failed" : ""}${waiting ? " waiting" : ""}${interrupted ? " interrupted" : ""}" datetime="${escapeHtml(started?.iso || finished?.iso || "")}" title="${escapeHtml(titleParts.join("；"))}">${parts.join("<span class=\"orch-time-separator\">·</span>")}</time>`;
 }
 
 function timingAgentLabel(key) {
@@ -5940,11 +5941,14 @@ function orchestrationTimingMarkup() {
     const meta = orchestrationAgentMeta(key);
     const failed = timing.status === "failed";
     const running = timing.status === "running";
-    return `<div class="orchestration-timing-agent role-${escapeHtml(meta.role)}${failed ? " failed" : ""}${running ? " running" : ""}" title="${escapeHtml(key)}">
+    const waiting = timing.status === "waiting";
+    const interrupted = timing.status === "interrupted";
+    const stateLabel = failed ? "未完成" : (running ? "进行中" : (interrupted ? "已中断" : (waiting ? "等待中" : "已完成")));
+    return `<div class="orchestration-timing-agent role-${escapeHtml(meta.role)}${failed ? " failed" : ""}${running ? " running" : ""}${waiting ? " waiting" : ""}${interrupted ? " interrupted" : ""}" title="${escapeHtml(key)}">
       <i class="orchestration-timing-dot" aria-hidden="true"></i>
       <span>${escapeHtml(timingAgentLabel(key))}</span>
       <b>${escapeHtml(fmtDur(timing.duration_s))}</b>
-      <em>${failed ? "未完成" : (running ? "进行中" : "已完成")}</em>
+      <em>${stateLabel}</em>
     </div>`;
   }).join("");
   return `<section class="orchestration-timing-card">
