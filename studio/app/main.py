@@ -1736,7 +1736,7 @@ def _static_html_preview_state(run_dir: str | None) -> dict:
 
 
 def _provisional_present_html(run_dir: str) -> str:
-    """Assemble slide fragments into an in-memory player without touching the job."""
+    """Build a live player around authored slide documents without rewriting them."""
     root = Path(run_dir)
     css_path = root / "base.css"
     if not css_path.is_file():
@@ -1747,11 +1747,10 @@ def _provisional_present_html(run_dir: str) -> str:
         if not match or not path.is_file():
             continue
         try:
-            fragment = path.read_text(encoding="utf-8").strip()
-        except (OSError, UnicodeError):
+            if path.stat().st_size > 0:
+                rows.append((int(match.group(1)), path.name))
+        except OSError:
             continue
-        if fragment:
-            rows.append((int(match.group(1)), fragment))
     rows.sort(key=lambda row: row[0])
     if not rows:
         raise HTTPException(status_code=404, detail="实时 PPT 页面尚未生成")
@@ -1760,11 +1759,15 @@ def _provisional_present_html(run_dir: str) -> str:
     height_match = re.search(r"--canvas-h:\s*(\d+)px", css)
     canvas_w = int(width_match.group(1)) if width_match else 1280
     canvas_h = int(height_match.group(1)) if height_match else 720
-    sections = "\n\n".join(fragment for _, fragment in rows)
+    frames = "\n".join(
+        f'    <iframe class="provisional-slide" data-slide="{number}" '
+        f'src="slides/{filename}" title="Slide {number}" scrolling="no"></iframe>'
+        for number, filename in rows
+    )
     player = f"""
   <script>
   (() => {{
-    const slides = [...document.querySelectorAll('.slide[data-slide]')];
+    const slides = [...document.querySelectorAll('iframe.provisional-slide[data-slide]')];
     const byNumber = new Map(slides.map(slide => [Number(slide.dataset.slide), slide]));
     const ordered = [...byNumber.keys()].filter(Number.isFinite).sort((a, b) => a - b);
     let current = Number(new URLSearchParams(location.search).get('slide')) || ordered[0] || 1;
@@ -1778,7 +1781,11 @@ def _provisional_present_html(run_dir: str) -> str:
     function go(number) {{
       if (!byNumber.has(Number(number))) return;
       current = Number(number);
-      slides.forEach(slide => slide.classList.toggle('active', Number(slide.dataset.slide) === current));
+      slides.forEach(slide => {{
+        const active = Number(slide.dataset.slide) === current;
+        slide.classList.toggle('active', active);
+        slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+      }});
       dispatchEvent(new CustomEvent('slidechange', {{ detail: {{ slide: current }} }}));
     }}
     function step(delta) {{
@@ -1791,7 +1798,26 @@ def _provisional_present_html(run_dir: str) -> str:
     }});
     addEventListener('resize', fitDeck);
     fitDeck();
-    const fontsReady = document.fonts?.ready || Promise.resolve();
+    function waitForFrame(frame) {{
+      return new Promise(resolve => {{
+        let settled = false;
+        const finish = () => {{
+          if (settled) return;
+          settled = true;
+          try {{
+            Promise.resolve(frame.contentDocument?.fonts?.ready)
+              .catch(() => undefined).then(resolve);
+          }} catch {{ resolve(); }}
+        }};
+        frame.addEventListener('load', finish, {{ once: true }});
+        frame.addEventListener('error', finish, {{ once: true }});
+        try {{
+          if (frame.contentWindow?.location.href !== 'about:blank'
+              && frame.contentDocument?.readyState === 'complete') finish();
+        }} catch {{ finish(); }}
+      }});
+    }}
+    const fontsReady = Promise.all(slides.map(waitForFrame));
     window.cleanDeck = {{ go, step, count: slides.length, fontsReady, provisional: true }};
     go(byNumber.has(current) ? current : ordered[0]);
     Promise.resolve(fontsReady).catch(() => undefined).then(() => requestAnimationFrame(() => {{
@@ -1806,10 +1832,25 @@ def _provisional_present_html(run_dir: str) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Live Presentation Preview</title>
-  <style>{css}</style>
+  <style>
+    * {{ box-sizing: border-box; }}
+    html, body {{ width:100%; height:100%; margin:0; overflow:hidden; background:#000; }}
+    .stage {{ position:fixed; inset:0; overflow:hidden; background:#000; }}
+    #deck {{
+      position:absolute; width:{canvas_w}px; height:{canvas_h}px;
+      transform-origin:0 0; overflow:hidden; background:#000;
+    }}
+    .provisional-slide {{
+      position:absolute; inset:0; width:{canvas_w}px; height:{canvas_h}px;
+      display:none; border:0; margin:0; background:#000; overflow:hidden;
+    }}
+    .provisional-slide.active {{ display:block; }}
+  </style>
 </head>
 <body>
-  <div class="stage"><main class="deck" id="deck">{sections}</main></div>
+  <div class="stage"><main class="deck" id="deck">
+{frames}
+  </main></div>
 {player}
 </body>
 </html>"""
