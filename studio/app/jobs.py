@@ -536,7 +536,7 @@ async def _process(deck_id):
     # Drop studio's venv vars so `uv run --project inference` uses the engine's
     # own venv cleanly (avoids the harmless VIRTUAL_ENV-mismatch warning).
     # Also drop inherited ANTHROPIC_*/OPENAI_* so the engine's own inference/.env
-    # (loaded via setdefault in distill.load_dotenv) is authoritative. Without this,
+    # (loaded via setdefault in the runtime loader) is authoritative. Without this,
     # an ambient ANTHROPIC_BASE_URL=https://api.anthropic.com (e.g. from a parent
     # Claude harness) shadows the tokenhub endpoint and the tokenhub key 401s.
     # (teammate-B deploy 2026-06-29)
@@ -610,7 +610,7 @@ async def _process(deck_id):
                     *engine.runner_cmd(job_path),
                     stdin=asyncio.subprocess.DEVNULL,
                     stdout=logf, stderr=asyncio.subprocess.STDOUT,
-                    cwd=str(engine.DISTILL_DIR), env=child_env,
+                    cwd=str(engine.INFERENCE_DIR), env=child_env,
                     start_new_session=True,   # 独立会话:studio 重启/被杀不会连带 TERM 引擎(曾致 exit=143 秒败)
                 )
                 break

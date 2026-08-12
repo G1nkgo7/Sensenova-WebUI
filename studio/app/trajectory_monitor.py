@@ -151,10 +151,14 @@ def _query_catalog() -> list[dict[str, Any]]:
     return rows
 
 
-def _is_opus5_run(run: Path, config: dict[str, Any]) -> bool:
-    model = str(config.get("model") or "").lower().replace("_", "-")
-    name = run.name.lower().replace("_", "-")
-    return "opus-5" in model or "opus5" in model or "opus-5" in name or "opus5" in name
+def _matches_trajectory_run(run: Path, config: dict[str, Any]) -> bool:
+    """Apply an optional deployment-owned model filter to discovered runs."""
+    expected = str(os.environ.get("STUDIO_TRAJECTORY_MODEL_FILTER") or "").strip().lower()
+    if not expected:
+        return True
+    model = str(config.get("model") or "").lower()
+    name = run.name.lower()
+    return expected in model or expected in name
 
 
 def _run_directories() -> list[Path]:
@@ -184,7 +188,7 @@ def _normalized_query(value: Any) -> str:
 
 
 def _catalog_records() -> list[dict[str, Any]]:
-    """Return one row per planned query, joined to the latest real Opus 5 run."""
+    """Return one row per planned query, joined to the latest matching run."""
     global _CATALOG_RECORD_CACHE
     roots = tuple(str(path) for path in configured_roots())
     cache_key = (str(query_catalog_path()), roots)
@@ -203,7 +207,7 @@ def _catalog_records() -> list[dict[str, Any]]:
         config = {
             "sample_id": query_id,
             "task": query,
-            "model": "claude-opus-5",
+            "model": str(os.environ.get("STUDIO_TRAJECTORY_DEFAULT_MODEL") or ""),
             "reasoning_effort": "high",
             "generation_preferences": {"page_count": int(row.get("slide_count") or 0)},
             "query_metadata": metadata,
@@ -224,7 +228,7 @@ def _catalog_records() -> list[dict[str, Any]]:
     latest_started: dict[str, tuple[float, Path, Path, dict[str, Any]]] = {}
     for run in _run_directories():
         for sample, config in _sample_roots(run):
-            if not _is_opus5_run(run, config):
+            if not _matches_trajectory_run(run, config):
                 continue
             query = _normalized_query(config.get("task"))
             sample_id = str(config.get("sample_id") or sample.name)
@@ -232,10 +236,10 @@ def _catalog_records() -> list[dict[str, Any]]:
             if key is None:
                 key = next((query_id for query_id in records if query_id in sample_id), None)
             if key is None:
-                # Keep a real Opus 5 smoke/canary even when it is intentionally
+                # Keep a real smoke/canary even when it is intentionally
                 # outside the formal 3K catalogue. Repeated retries collapse to
                 # the same logical query instead of appearing as separate rows.
-                key = f"opus5-extra-{hashlib.sha1(query.encode('utf-8')).hexdigest()[:16]}"
+                key = f"extra-{hashlib.sha1(query.encode('utf-8')).hexdigest()[:16]}"
             timestamp = _latest_mtime(sample)
             previous = latest_started.get(key)
             if previous is None or timestamp > previous[0]:
@@ -940,7 +944,7 @@ def not_started_progress_payload(record: dict[str, Any]) -> dict[str, Any]:
         "ppt_output": "static_html",
         "query": query,
         "user_query": query,
-        "model": "claude-opus-5",
+        "model": str(os.environ.get("STUDIO_TRAJECTORY_DEFAULT_MODEL") or ""),
         "pipeline": "mural-presenter",
         "skill_version": "mural-presenter",
         "slide_count": page_count,

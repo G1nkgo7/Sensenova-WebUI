@@ -69,7 +69,7 @@ Do not combine several dramatic devices on one page. Decorative clipping may aff
 
 ## 4 · ECharts
 
-- Use ECharts for quantitative comparison, trend, distribution, or multivariate data.
+- Use ECharts for quantitative comparison, trend, frequency patterns, or multivariate data.
 - Provide explicit dimensions and initialize after the container is measurable.
 - Labels, legends, and axes must use deck typography and pass the minimum-size floor.
 - Highlight one primary series; reduce supporting series to neutral tones.

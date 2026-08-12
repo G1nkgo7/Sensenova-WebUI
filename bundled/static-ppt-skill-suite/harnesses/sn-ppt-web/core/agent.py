@@ -8,7 +8,7 @@
 子 agent 由 `goal`(干什么)+ `toolsets`(获得哪些能力)在调用时拼出；本专属 Harness
 只补齐 Presenter 所需的最小运行契约，例如 Slide/Review 必须实际获得 Vision。
 
-进程/线程模型:sample 之间 = 进程(distill_ppt.py 调度);一个 sample 内的子 agent = 线程
+进程/线程模型:sample 之间 = 进程(presenter.py 调度);一个 sample 内的子 agent = 线程
 (每次 delegate_task 起一个**本地** ThreadPoolExecutor,用完即关 → 不跨 sample 串台)。
 """
 import base64
@@ -301,7 +301,9 @@ class Agent:
         self._child_sem = threading.Semaphore(MAX_CONCURRENT_CHILDREN)   # 父级并发闸
         self._delegate_depth = 0
         # —— 模型客户端 ——
-        self.model = self.cfg.get("model", os.environ.get("MODEL", "claude-opus-4-7-thinking"))
+        self.model = self.cfg.get(
+            "model", os.environ.get("MODEL", os.environ.get("SENSENOVA_MODEL_NAME", "deployment-model"))
+        )
         self.a_base = self.cfg.get("anthropic_base_url",
                                    os.environ.get("ANTHROPIC_BASE_URL", "https://tokenhub.sensetime.com"))
         self.max_turns = int(self.cfg.get("max_turns", 120))
@@ -330,7 +332,7 @@ class Agent:
                             if os.environ.get("CACHE_BETA_HEADER", "0") != "0" else {})
         if os.environ.get("MODEL_BACKEND", "").lower() == "openai":
             # 学生模型(vLLM,OpenAI 兼容):鸭子化 anthropic 客户端,让 v1.2 引擎原样驱动 9B/27B。
-            # 纯加法,只在 MODEL_BACKEND=openai 时生效;Opus 走下面 else,行为不变。
+            # 纯加法,只在 MODEL_BACKEND=openai 时生效;Anthropic 走下面 else,行为不变。
             from . import openai_backend
             self.model = self.cfg.get("model") or os.environ.get("STUDENT_MODEL", self.model)
             self.thinking = False   # OpenAI 兼容模型由请求体 transport 控制，不传 Anthropic 参数
@@ -526,7 +528,7 @@ def _model_call(agent, messages):
     if extra_body:
         kwargs["extra_body"] = extra_body
     if agent.thinking:
-        # Opus 4.7/4.8:effort 属于 output_config;display 必须显式 "summarized" 才能把(摘要版)推理写进轨迹。
+        # Anthropic 接口:effort 属于 output_config;display 必须显式 "summarized" 才能把(摘要版)推理写进轨迹。
         kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
         kwargs["output_config"] = {"effort": agent.think_effort}
     if agent.nova_raw is not None:
@@ -2878,7 +2880,7 @@ _NO_BITMAP_VALUES = {
 }
 # CJK ways plans express "no bitmap on this page".  Language-model plans often
 # write the machine field in Chinese (``image_opportunity: 无位图``) instead of
-# the English enum; both the startup dispatch gate and the distill final
+# the English enum; both the startup dispatch gate and the final
 # acceptance must read these as no-bitmap, exactly like ``none``.
 _NO_BITMAP_CJK_RE = re.compile(
     r"^(?:无|none|无需|不需|不用)?"
@@ -2914,8 +2916,8 @@ def _normalize_image_opportunity(raw_value):
 def _image_opportunity_needs_bitmap(raw_value):
     """Single source of truth for whether a page declares a bitmap opportunity.
 
-    Both the pre-Slide dispatch gate (``agent``) and the distill final
-    acceptance (``distill_ppt``) call this so the two never diverge.  A page
+    Both the pre-Slide dispatch gate (``agent``) and the final
+    acceptance (``presenter``) call this so the two never diverge.  A page
     needs a bitmap unless its declared opportunity is a no-bitmap enum (``none``,
     ``chart_only`` …) or an equivalent CJK phrase (``无位图``、``无需配图``).
     """

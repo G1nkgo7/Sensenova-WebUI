@@ -42,7 +42,7 @@ sn-ppt-web（内部使用 `sn-ppt-web` Harness，并路由到 `sn-ppt-web-zh/en`
 
 ```text
 bundled/static-ppt-skill-suite/skills/sn-ppt-web/SKILL.md
-bundled/static-ppt-skill-suite/harnesses/sn-ppt-web/distill_ppt.py
+bundled/static-ppt-skill-suite/harnesses/sn-ppt-web/presenter.py
 ```
 
 运行：

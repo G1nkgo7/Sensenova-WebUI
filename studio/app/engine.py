@@ -17,16 +17,16 @@ from pathlib import Path
 from .db import DATA_DIR, WORKSPACES_DIR
 
 STUDIO_DIR = Path(__file__).resolve().parent.parent          # .../studio
-DISTILL_DIR = Path(os.environ.get(
+INFERENCE_DIR = Path(os.environ.get(
     "PPTAGENT_INFERENCE_ROOT",
     STUDIO_DIR.parent / ("inference" if (STUDIO_DIR.parent / "inference").is_dir() else "inference"),
 )).expanduser().resolve()
-PROJECT_ROOT = DISTILL_DIR.parent
-SERVE_ONE = DISTILL_DIR / "serve_one.py"
+PROJECT_ROOT = INFERENCE_DIR.parent
+SERVE_ONE = INFERENCE_DIR / "serve_one.py"
 JOBS_DIR = DATA_DIR / "jobs"
-SENSE_PRESENT_V2_ROOT = DISTILL_DIR.parent / "vendor" / "sense-present-v2"
+SENSE_PRESENT_V2_ROOT = INFERENCE_DIR.parent / "vendor" / "sense-present-v2"
 SENSE_PRESENT_V2_SKILLS_ROOT = SENSE_PRESENT_V2_ROOT / "skills"
-LOCAL_PIPELINE_ROOT = DISTILL_DIR.parent / "vendor" / "static_ppt-clean-current"
+LOCAL_PIPELINE_ROOT = INFERENCE_DIR.parent / "vendor" / "static_ppt-clean-current"
 CLEAN_PIPELINE_ROOT = Path(
     os.environ.get(
         "PPTAGENT_CLEAN_PIPELINE_ROOT",
@@ -54,7 +54,7 @@ VISUAL_CRAFT_HARNESS_ROOT = Path(
     )
 )
 VISUAL_CRAFT_HARNESS_ENTRY = os.environ.get(
-    "PPTAGENT_VISUAL_CRAFT_HARNESS_ENTRY", "distill_ppt.py"
+    "PPTAGENT_VISUAL_CRAFT_HARNESS_ENTRY", "presenter.py"
 )
 VISUAL_CRAFT_MOUNT_ROOT = DATA_DIR / "skill-mounts" / "visual-craft"
 _BUNDLED_SN_PPT_WEB_SUITE_ROOT = (
@@ -86,7 +86,7 @@ SN_PPT_WEB_HARNESS_ROOT = Path(
     )
 )
 SN_PPT_WEB_HARNESS_ENTRY = os.environ.get(
-    "PPTAGENT_SN_PPT_WEB_HARNESS_ENTRY", "distill_ppt.py"
+    "PPTAGENT_SN_PPT_WEB_HARNESS_ENTRY", "presenter.py"
 )
 MURAL_PRESENTER_SKILL_ROOT = Path(
     os.environ.get(
@@ -101,7 +101,7 @@ MURAL_PRESENTER_HARNESS_ROOT = Path(
     )
 )
 MURAL_PRESENTER_HARNESS_ENTRY = os.environ.get(
-    "PPTAGENT_MURAL_PRESENTER_HARNESS_ENTRY", "distill_ppt.py"
+    "PPTAGENT_MURAL_PRESENTER_HARNESS_ENTRY", "presenter.py"
 )
 ENGINE_SITE_PACKAGES = Path(
     os.environ.get(
@@ -571,8 +571,8 @@ def _sense_present_skill(name: str, label: str, pipeline: str, entry: str) -> di
         upstream = json.loads((SENSE_PRESENT_V2_ROOT / "UPSTREAM.json").read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         pass
-    ready = not missing and (DISTILL_DIR / "sense_present_v2.py").is_file() \
-        and (DISTILL_DIR / entry).is_file()
+    ready = not missing and (INFERENCE_DIR / "sense_present_v2.py").is_file() \
+        and (INFERENCE_DIR / entry).is_file()
     return {
         "label": label,
         "path": str(SENSE_PRESENT_V2_SKILLS_ROOT / name),
@@ -754,7 +754,7 @@ def _mural_presenter_pipeline(skill: dict | None = None) -> dict:
 PIPELINES = {
     "sense-present-standard-harness": {
         "label": "SenseNova Static HTML Harness",
-        "path": str(DISTILL_DIR),
+        "path": str(INFERENCE_DIR),
         "entry": "sense_present_standard.py",
         "supports": ["anthropic", "openai"],
         "skill_mode": "sn-ppt-standard",
@@ -765,7 +765,7 @@ PIPELINES = {
     },
     "sense-present-dazzle-harness": {
         "label": "SenseNova Dynamic HTML Harness",
-        "path": str(DISTILL_DIR),
+        "path": str(INFERENCE_DIR),
         "entry": "sense_present_dazzle.py",
         "supports": ["anthropic", "openai"],
         "skill_mode": "sn-ppt-dazzle",
@@ -850,12 +850,7 @@ if _ENVIRONMENT_MODEL:
 
 # 老 deck 的 DB 里可能存了历史 model key(label/id 漂移期或旧版本留下的),映射到现行注册表 key,
 # 保证老 deck 仍可解析、不报「未知模型」。新建 deck 一律存归一后的现行 key。
-ALIASES = {
-    "opus-4.8": "opus-4.7-thinking",
-    "opus-4.8-thinking": "opus-4.7-thinking",
-    "opus-4.7": "opus-4.7-thinking",
-    "opus-4.6": "opus-4.7-thinking",
-}
+ALIASES = {}
 
 
 def canon(model_key: str):
@@ -1004,13 +999,13 @@ def validate_selection(model_key: str, pipeline_key: str, skill_key: str,
     return None
 
 
-# ---- C4: Opus(anthropic)key 自动失败转移 -------------------------------------
+# ---- Anthropic key 自动失败转移 ------------------------------------------
 # 引擎子进程自读 .env(load_dotenv 用 setdefault,不覆盖已设的)→ studio 在 child_env 里
-# 注入探活后的 ANTHROPIC_API_KEY 即可覆盖引擎默认 key。key 池 + base_url 从 DISTILL_DIR/.env
+# 注入探活后的 ANTHROPIC_API_KEY 即可覆盖引擎默认 key。key 池 + base_url 从 INFERENCE_DIR/.env
 # 读(studio 自身 environ 的 ANTHROPIC_* 已被 jobs.py 剔除,故直接读文件):
 #   ANTHROPIC_API_KEY            主 key
 #   ANTHROPIC_API_KEY_FALLBACKS  备用 key(逗号分隔,主挂了按序探活切过去)
-_ANTHROPIC_ENV_FILE = DISTILL_DIR / ".env"
+_ANTHROPIC_ENV_FILE = INFERENCE_DIR / ".env"
 _KEY_CACHE = {"key": None, "ts": 0.0}
 _KEY_CACHE_TTL = 120.0            # 探活结果缓存;deck 派发不是高频路径,120s 足够且省探活开销
 _REFRESH_LOCK = threading.Lock()
@@ -1064,7 +1059,7 @@ def _anthropic_pool():
     return base, keys
 
 
-def _probe_key(base_url, key, model="claude-opus-4-7-thinking", timeout=4) -> bool:
+def _probe_key(base_url, key, model="deployment-model", timeout=4) -> bool:
     """极小的 /v1/messages 探活:200=通道+key 都活;503(无可用通道)/401(坏 key)/超时=不可用。"""
     body = json.dumps({"model": model, "max_tokens": 1,
                        "messages": [{"role": "user", "content": "hi"}]}).encode()
@@ -1081,7 +1076,7 @@ def _probe_key(base_url, key, model="claude-opus-4-7-thinking", timeout=4) -> bo
         return False                  # 超时 / 连不上 = 不可用
 
 
-def _refresh_key(model: str = "claude-opus-4-7-thinking"):
+def _refresh_key(model: str = "deployment-model"):
     """探活主→备,把首个 200 的 key 写进缓存。探活是真 /v1/messages 调用(秒级、有波动),故只在后台线程跑。"""
     base, keys = _anthropic_pool()
     if not keys:
@@ -1094,8 +1089,8 @@ def _refresh_key(model: str = "claude-opus-4-7-thinking"):
     _KEY_CACHE.update(key=chosen, ts=time.time())
 
 
-def resolve_anthropic_key(model: str = "claude-opus-4-7-thinking") -> str:
-    """返回可用 Opus key —— **非阻塞**:命中新鲜缓存直接回;过期/未探活则立刻返回已知值(或主 key)
+def resolve_anthropic_key(model: str = "deployment-model") -> str:
+    """返回可用的模型 key —— **非阻塞**:命中新鲜缓存直接回;过期/未探活则立刻返回已知值(或主 key)
     并后台线程刷新。故 deck 派发路径永不卡在探活上(探活可能秒级)。语义保证:最坏也只退回主 key,
     即『没有 C4 时的原行为』—— C4 只会更好、绝不更糟。"""
     now = time.time()
@@ -1298,8 +1293,8 @@ def _engine_python() -> str | None:
     # Local deployments keep the heavy generation dependencies in the
     # inference project venv.  Prefer it over the host Python; the latter is
     # only a deployment fallback paired with ENGINE_SITE_PACKAGES.
-    candidates.append(DISTILL_DIR / ".venv" / "bin" / "python")
-    candidates.append(DISTILL_DIR / ".venv" / "Scripts" / "python.exe")
+    candidates.append(INFERENCE_DIR / ".venv" / "bin" / "python")
+    candidates.append(INFERENCE_DIR / ".venv" / "Scripts" / "python.exe")
     candidates.append(Path("/usr/bin/python3"))
     for python in candidates:
         if python.is_file() and os.access(python, os.X_OK):
@@ -1317,7 +1312,7 @@ def _prepend_path(value: str, *prefixes: Path) -> str:
 def _playwright_revisions() -> dict[str, str]:
     """Read Chromium revisions required by the engine's Playwright package."""
     manifests = sorted(
-        (DISTILL_DIR / ".venv" / "lib").glob(
+        (INFERENCE_DIR / ".venv" / "lib").glob(
             "python*/site-packages/playwright/driver/package/browsers.json"
         )
     )
@@ -1355,7 +1350,7 @@ def _installed_browser(cache: Path) -> Path | None:
         )
     if chromium_revision:
         patterns.append(f"chromium-{chromium_revision}/chrome-linux64/chrome")
-    # Custom/older Playwright distributions may omit browsers.json. Only in
+    # Custom/older Playwright packages may omit browsers.json. Only in
     # that case is a generic installed Chromium preferable to no browser.
     if not patterns:
         patterns.extend((
@@ -1489,7 +1484,7 @@ def runner_cmd(job_path) -> list[str]:
         return [python, str(SERVE_ONE), "--job", str(job_path)]
     uv = shutil.which("uv")
     if uv:
-        return [uv, "run", "--project", str(DISTILL_DIR),
+        return [uv, "run", "--project", str(INFERENCE_DIR),
                 "python", str(SERVE_ONE), "--job", str(job_path)]
     raise RuntimeError(
         "No engine runtime found. Set PPTAGENT_ENGINE_PYTHON to a Python with "

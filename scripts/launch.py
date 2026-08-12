@@ -217,7 +217,7 @@ def main() -> int:
         os.environ.get("PPTAGENT_CLEAN_PIPELINE_ROOT", PROJECT_ROOT / "vendor/static_ppt-clean-current")
     ).expanduser().resolve()
     bundled_skill = BUNDLED_PRESENTER_SUITE / "skills" / "sn-ppt-web" / "SKILL.md"
-    bundled_harness = BUNDLED_PRESENTER_SUITE / "harnesses" / "sn-ppt-web" / "distill_ppt.py"
+    bundled_harness = BUNDLED_PRESENTER_SUITE / "harnesses" / "sn-ppt-web" / "presenter.py"
     has_bundled_presenter = bundled_skill.is_file() and bundled_harness.is_file()
     if not has_bundled_presenter and not (pipeline_root / "infer.py").is_file():
         raise SystemExit(

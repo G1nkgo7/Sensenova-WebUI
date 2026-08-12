@@ -29,7 +29,7 @@ import urllib.request
 ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, ROOT)
 
-import runtime as distill  # noqa: E402  (current pipeline:复用其 worker / build_config / load_dotenv)
+import runtime as runtime_driver  # noqa: E402  (reuse worker/build_config/load_dotenv)
 from attachments_runtime import build_initial_user_content, stage_seed_attachments  # noqa: E402
 
 
@@ -106,7 +106,7 @@ def _select_pipeline(job):
     version = job.get("pipeline_version") or "current"
     pipe = job.get("pipeline") or {}
     root = pipe.get("path")
-    entry = pipe.get("entry") or "distill_ppt.py"
+    entry = pipe.get("entry") or "presenter.py"
     if not root:
         raise RuntimeError(f"pipeline {version} missing path")
     skill_mode = pipe.get("skill_mode") or "ppt-skill-html"
@@ -385,7 +385,7 @@ def main():
     # injected by jobs.py. Frozen/versioned Harness directories intentionally
     # do not own readable credentials, so their optional .env must not block a
     # run when the process environment is already complete.
-    distill.load_dotenv()
+    runtime_driver.load_dotenv()
     pipe.load_dotenv()
 
     # 复用 inference 的标准 config;dry_run 走 runtime.worker 里的 _dry_worker 分支。

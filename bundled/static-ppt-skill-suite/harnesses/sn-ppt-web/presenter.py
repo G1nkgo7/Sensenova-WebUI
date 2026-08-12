@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""PPT agentic 蒸馏入口 —— 单条 / 批量并行 rollout,生成 SFT 用的原始轨迹。
+"""PPT agentic 生成入口 —— 单条 / 批量并行任务。
 
-一个文件管全部蒸馏:CLI(单条 + batch)+ 调度(并行子进程 + manifest 断点续跑)+ PPT recipe
+一个文件管全部生成流程:CLI(单条 + batch)+ 调度(并行子进程 + manifest 断点续跑)+ PPT recipe
 (seed→brief、编排器装配、拒绝采样验收)。通用 agent 运行时在 core/(agent/tools/trace),
 本文件是它唯一认识 "PPT" 的薄外壳——换领域只改本文件 + skills/。
 
-teacher 模型(Claude Opus)按 skills/sn-ppt-web-zh 自主生成整套 HTML 幻灯片,轨迹经**拒绝采样**
-落库:编排器负责规划、按设计亲缘页组委派并运行确定性收口脚本(不许写 slides/),并行 Slide Group 写/渲/自纠自己的页面。
+配置的模型按 skills/sn-ppt-web-zh 自主生成整套 HTML 幻灯片,编排器负责规划、
+按设计亲缘页组委派并运行确定性收口脚本(不许写 slides/),并行 Slide Group 写/渲/自纠自己的页面。
 
 每条 seed = 一个 sample,跑在**独立子进程 + 独立 run 目录**里,进程级全局/playwright/cwd 永不串台:
     runs/<batch>/<sample_id>/      隔离工作区 + _trace/(orchestrator/ subagents/)
@@ -14,11 +14,11 @@ teacher 模型(Claude Opus)按 skills/sn-ppt-web-zh 自主生成整套 HTML 幻�
 
 用法:
     # 单条(直接传 brief)
-    uv run python distill_ppt.py --query "做一份 5 页的人工智能简介" --batch adhoc
+    uv run python presenter.py --query "做一份 5 页的人工智能简介" --batch adhoc
     # 批量(jsonl,每行一个 {query, lang?, slide_count?, ...})
-    uv run python distill_ppt.py --input briefs.jsonl --batch q1 --workers 64
-    uv run python distill_ppt.py --input briefs.jsonl --batch q1 --resume      # 断点续跑
-    uv run python distill_ppt.py --input briefs.jsonl --batch q1 --dry-run     # 不调模型,验证骨架
+    uv run python presenter.py --input briefs.jsonl --batch q1 --workers 64
+    uv run python presenter.py --input briefs.jsonl --batch q1 --resume      # 断点续跑
+    uv run python presenter.py --input briefs.jsonl --batch q1 --dry-run     # 不调模型,验证骨架
 """
 import argparse
 import concurrent.futures as cf
@@ -1925,7 +1925,7 @@ def build_config(args):
     return {
         "batch": args.batch,
         "dry_run": args.dry_run,
-        "model": os.environ.get("MODEL", "claude-opus-4-7-thinking"),
+        "model": os.environ.get("MODEL", os.environ.get("SENSENOVA_MODEL_NAME", "deployment-model")),
         "anthropic_base_url": os.environ.get("ANTHROPIC_BASE_URL", "https://tokenhub.sensetime.com"),
         "openai_base_url": os.environ.get("OPENAI_BASE_URL", "https://tokenhub.sensetime.com/v1"),
         "image_model": os.environ.get("IMAGE_MODEL", "gpt-image-2"),
@@ -1951,7 +1951,7 @@ class Progress:
                                        TimeElapsedColumn, TimeRemainingColumn)
             self._console = Console()
             self._rich = RP(
-                SpinnerColumn(), TextColumn("[bold cyan]蒸馏中[/]"), BarColumn(bar_width=None),
+                SpinnerColumn(), TextColumn("[bold cyan]生成中[/]"), BarColumn(bar_width=None),
                 MofNCompleteColumn(),
                 TextColumn("[green]✓{task.fields[ok]}[/] [yellow]⊘{task.fields[rej]}[/] [red]✗{task.fields[err]}[/]"),
                 TextColumn("·"), TimeElapsedColumn(), TextColumn("剩余"), TimeRemainingColumn(),
@@ -2012,7 +2012,7 @@ def _archive_failed(run_dir, batch, prev):
 
 def main():
     load_dotenv()
-    ap = argparse.ArgumentParser(description="PPT agentic 蒸馏 —— 单条 / 批量并行 rollout。")
+    ap = argparse.ArgumentParser(description="PPT agentic 生成 —— 单条 / 批量并行任务。")
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--query", help="单条:直接传一个 brief 跑一条")
     g.add_argument("--input", help="批量:seed jsonl 文件(每行一个 {query, lang?, slide_count?, ...})")

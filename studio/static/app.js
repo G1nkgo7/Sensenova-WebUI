@@ -1638,8 +1638,6 @@ async function removeDeck(id, kind = "static") {
 
 /* ---------------- 提交简报 ---------------- */
 const MODEL_LABEL = {
-  "opus-4.7-thinking": "Opus 4.7 Thinking",
-  "opus-4.7": "Opus 4.7 Thinking",
   "sensenova-flash-lite-v39": "SenseNova Flash Lite v39 (1)",
   "sensenova-flash-lite-v39-2": "SenseNova Flash Lite v39 (2)",
   "sensenova-flash-lite-v39-3": "SenseNova Flash Lite v39 (3)",

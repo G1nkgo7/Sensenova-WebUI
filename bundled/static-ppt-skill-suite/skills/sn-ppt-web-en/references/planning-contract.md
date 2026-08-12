@@ -91,7 +91,7 @@ Use this exact semantic structure:
 - source line:
 
 ## Visual implementation
-- image_opportunity: **a single machine-readable enum only, with no explanation** — `real_required` / `generated_ok` / `none` / `chart_only` / `canvas_only` / `typography_only` (`none` and `*_only` are read as no-bitmap). The startup gate and the distill acceptance parse only this enum line; put the reason on the next `image_opportunity_reason` line, never on this one.
+- image_opportunity: **a single machine-readable enum only, with no explanation** — `real_required` / `generated_ok` / `none` / `chart_only` / `canvas_only` / `typography_only` (`none` and `*_only` are read as no-bitmap). The startup gate and final acceptance parse only this enum line; put the reason on the next `image_opportunity_reason` line, never on this one.
 - image_opportunity_reason: one-line human reason. Named real people/works/products/processes default to a real-image opportunity (retrieve portraits/official shots) — "no photo on hand" / "CSS is safer" / "style unity" are not sufficient reasons for `none`.
 - primary_medium: real-image | generated-image | echarts | canvas | typography
 - composition:
@@ -163,4 +163,3 @@ Planning freezes only when:
 - the repetition preflight shows deliberate rhythm rather than template repetition;
 - attachment must-show decisions and paper Figure routes are explicit;
 - page count, numbering, closing, references, and delivery scope agree.
-

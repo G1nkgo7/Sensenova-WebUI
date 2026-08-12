@@ -67,7 +67,7 @@ FAMILY_FACES: dict[str, tuple[Face, ...]] = {
     "Xiaolai": (Face(("Xiaolai-Regular.ttf",), "400"),),
     "LXGW WenKai": (
         Face(("LXGWWenKai-Regular.ttf",), "400"),
-        # The official TTF distribution is a regular face; browsers may
+        # The official TTF package contains a regular face; browsers may
         # synthesize bold while the portable bundle keeps the same glyph design.
         # Prefer the verified regular source here. Some historical authoring
         # images contain a malformed bold cmap; using it makes pyftsubset fail

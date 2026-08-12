@@ -111,7 +111,7 @@ Use at a narrative high point. Choose one dominant device: a giant verified numb
 |---|---|
 | precise nodes, connections, stages, hierarchy | Canvas geometry + HTML labels |
 | spatial metaphor or atmospheric mechanism | image + HTML annotation |
-| quantitative comparison, trend, distribution | ECharts |
+| quantitative comparison, trend, frequency patterns | ECharts |
 | icons, logos, arrows, small marks | small SVG |
 | ordinary points or categories | HTML/CSS |
 
@@ -164,4 +164,3 @@ The action must serve the subject, recur as a controlled family, and never sacri
 - Let content determine height; avoid fixed boxes that create empty interiors.
 - Prefer fewer, larger, clearer elements to many small cards.
 - Inspect the page at full size and in the contact sheet before acceptance.
-

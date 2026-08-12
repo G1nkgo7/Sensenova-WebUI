@@ -8,7 +8,7 @@
 每个 subagent 在自己的上下文里干活,只把一段文本总结(含截图路径)返回给编排器;截图本身留在
 subagent 上下文里(上下文隔离)。编排器自己**不渲染、不看图**,据 subagent 返回的报告做决策。
 
-进程/线程模型:sample 之间 = 进程(distill.py 调度);一个 sample 内的 slide subagent =
+进程/线程模型:sample 之间 = 进程(runtime.py 调度);一个 sample 内的 slide subagent =
 线程(每次 delegate_task 起一个**本地** ThreadPoolExecutor,用完即关,不留模块级全局池 →
 不会跨 sample 串台)。render 在**子进程**里跑(skill 自带脚本 skills/ppt-skill/scripts/render.py)。
 
@@ -41,7 +41,7 @@ SKILLS_DIR = os.path.abspath(os.environ.get("SKILLS_DIR", os.path.join(ROOT, "sk
 PPT_SKILL_DIR = os.path.abspath(os.environ.get("PPT_SKILL_DIR", os.path.join(SKILLS_DIR, "ppt-skill")))
 
 # 子 agent 并发上限(slide-writer / image-curator 共用同一池)。对齐 hermes 语义改名,
-# 保留旧 env 名 SLIDE_CONCURRENCY 兼容(restart_distill.sh 仍在用)。
+# 保留旧 env 名 SLIDE_CONCURRENCY 兼容早期启动脚本。
 MAX_CONCURRENT_CHILDREN = int(os.environ.get("MAX_CONCURRENT_CHILDREN",
                               os.environ.get("SLIDE_CONCURRENCY", "4")))
 SLIDE_CONCURRENCY = MAX_CONCURRENT_CHILDREN                      # 兼容别名
@@ -356,7 +356,9 @@ class Agent:
         self._delegate_depth = 0
 
         # —— 模型客户端 ——
-        self.model = self.cfg.get("model", os.environ.get("MODEL", "claude-opus-4-7"))
+        self.model = self.cfg.get(
+            "model", os.environ.get("MODEL", os.environ.get("SENSENOVA_MODEL_NAME", "deployment-model"))
+        )
         self.a_base = self.cfg.get("anthropic_base_url",
                                    os.environ.get("ANTHROPIC_BASE_URL", "https://tokenhub.sensetime.com"))
         self.max_turns = int(self.cfg.get("max_turns", 120))
@@ -541,7 +543,7 @@ def _model_call(agent, messages, with_tools=True):
     if with_tools:
         kwargs["tools"] = agent.tools
     if agent.thinking:
-        # Opus 4.7/4.8:effort 属于 output_config(放进 thinking 里会被静默忽略);
+        # Anthropic 接口:effort 属于 output_config(放进 thinking 里会被静默忽略);
         # display 默认 "omitted" → thinking 文本为空,必须显式 "summarized" 才能把(摘要版)推理写进轨迹。
         kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
         kwargs["output_config"] = {"effort": agent.think_effort}
@@ -918,7 +920,7 @@ def delegate_task(parent, goal=None, context=None, toolsets=None, role=None,
     (让 `_accept` 拒收)+ 标记 abandoned(迟到线程丢弃自己的记录)。"""
     # 小模型(如 9B)有时把 tasks 数组当成 JSON 字符串塞进来(arguments 里 "tasks":"[{...}]"),
     # 而非真数组 → 不宽容解析的话 _normalize_task 拿不到 goal、回错,模型反复重发同样格式陷入死循环。
-    # 这里把 str 形态的 tasks/goal 宽容还原(Opus 传真数组,isinstance 判 False 不受影响)。
+    # 这里把 str 形态的 tasks/goal 宽容还原(模型直接传数组时不受影响)。
     if isinstance(tasks, str):
         try:
             _p = json.loads(tasks)
@@ -1117,7 +1119,7 @@ def _link_skills(run_dir):
 
 
 def run_sample(sample_id, seed, run_dir, config):
-    """distill.py 的入口契约。跑编排器(它会并行委派 subagent),做结构化验收,返回状态 dict。"""
+    """runtime.py 的入口契约。跑编排器(它会并行委派 subagent),做结构化验收,返回状态 dict。"""
     _link_skills(run_dir)
     orch = Agent(role="orchestrator", sid=sample_id, ws=run_dir, sub_dir="orchestrator",
                  tools_schema=tools.orchestrator_tools(), config=config,
