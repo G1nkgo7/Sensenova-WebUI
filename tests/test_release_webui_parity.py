@@ -6,6 +6,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleaseWebUIParityTests(unittest.TestCase):
+    def test_preview_image_reveal_keeps_the_canvas_full_bleed(self):
+        css = (ROOT / "studio/static/app.css").read_text(encoding="utf-8")
+        self.assertIn(
+            "from { opacity: 0; filter: saturate(.4) brightness(1.15); }",
+            css,
+        )
+        self.assertNotIn(
+            "from { opacity: 0; transform: scale(.96);",
+            css,
+        )
+
     def test_process_feed_keeps_local_deployment_autofollow_and_times(self):
         app = (ROOT / "studio/static/app.js").read_text(encoding="utf-8")
         for marker in (

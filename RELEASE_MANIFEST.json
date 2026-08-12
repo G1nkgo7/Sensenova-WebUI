@@ -2,9 +2,9 @@
   "product": "SenseNova Present WebUI",
   "edition": "V1 static / no authentication",
   "version": "v1.0.0",
-  "built_at_utc": "2026-08-12T05:30:00Z",
-  "source_revision": "45c5ec63ea50a569d078ac257e05f7ec20456293",
-  "source_worktree": "clean release synchronized from the current local WebUI working tree",
+  "built_at_utc": "2026-08-12T06:09:43Z",
+  "source_revision": "81fec595f883c96dae0e4f7a1acc9a6611fd55cb",
+  "source_worktree": "release synchronization based on source_revision plus this commit",
   "skills": [
     "sn-ppt-web",
     "sn-ppt-web-zh",
@@ -14,9 +14,9 @@
   "display_name": "sn-ppt-web",
   "offline_fonts_included": true,
   "offline_font_count": 45,
-  "tree_sha256_before_manifest": "0022989859942192c9f3b73cd115109dc3fb6121042659ce3023125868d88e99",
+  "tree_sha256_before_manifest": "32543e4f68e65d0f45b17235d52a84a8880b7d601c1ec6290377769b9eb51cd1",
   "file_count_before_manifest": 192,
-  "bytes_before_manifest": 139927784,
+  "bytes_before_manifest": 139928140,
   "runtime_data_included": false,
   "secrets_included": false
 }
