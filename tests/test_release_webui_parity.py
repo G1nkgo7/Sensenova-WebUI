@@ -11,6 +11,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleaseWebUIParityTests(unittest.TestCase):
+    def test_provisional_player_wraps_complete_slide_documents(self):
+        main = (ROOT / "studio/app/main.py").read_text(encoding="utf-8")
+        self.assertIn(
+            "iframe.provisional-slide[data-slide]",
+            main,
+        )
+        self.assertIn(
+            'src="slides/{filename}"',
+            main,
+        )
+        self.assertIn(
+            "const fontsReady = Promise.all(slides.map(waitForFrame));",
+            main,
+        )
+        self.assertNotIn(
+            "document.querySelectorAll('.slide[data-slide]')",
+            main,
+        )
+
     def test_deployment_think_off_reaches_openai_compatible_chat_api(self):
         engine = (ROOT / "studio/app/engine.py").read_text(encoding="utf-8")
         self.assertIn('"chat_template_kwargs" if transport == "openai"', engine)
