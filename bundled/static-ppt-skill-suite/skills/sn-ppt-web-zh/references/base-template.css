@@ -459,7 +459,9 @@ svg.svg-diagram{
 .arch-matrix .quad .q-label{ font-family:var(--font-sans); font-size:var(--fs-caption); color:var(--accent); letter-spacing:var(--tracking-cjk-label); }
 
 /* J. 过渡页 / 章节分隔页设计系统。
-   所有过渡页统一使用 .slide--section 的字体角色、编号语法和内容层级；
+   所有过渡页/章节分隔页统一使用标准的 .slide--section（字体角色、编号语法和内容层级）；
+   ⛔ 不要自造 .slide--divider / .slide--transition 等类——过渡页只用 .slide--section。
+   （计划里的 `dividers` 是负责过渡页的 Slide 页组名，不是 CSS 类。）
    通过 left/right/center 三种同源构图改变重心，不复制死模板，也不每页另起语法。
    用法:<section class="slide slide--cover slide--section">
            <div class="slide-body">

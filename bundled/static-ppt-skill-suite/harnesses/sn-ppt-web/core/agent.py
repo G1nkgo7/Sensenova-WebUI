@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sn-ppt-web 的 agent 运行时与委派适配层。
+"""Long-Horizon Presenter 的 agent 运行时与委派适配层。
 
 - `Agent`:单 agent 的状态 + 沙箱(safe/read_path/writable)+ 模型客户端 + 一个 Trace。
 - `run_loop(agent)`:**纯** ReAct 循环(模型 → 工具 → 模型),模型不再调工具即收尾,或到 max_turns;不替模型兜底。
@@ -74,6 +74,10 @@ SLIDE_MAX_TURNS_PER_EXTRA_PAGE = int(os.environ.get("SLIDE_MAX_TURNS_PER_EXTRA_P
 SLIDE_MAX_TURNS_CAP = int(os.environ.get("SLIDE_MAX_TURNS_CAP", "120"))
 MAX_REVIEW_ATTEMPTS = int(os.environ.get("MAX_REVIEW_ATTEMPTS", "3"))
 MAX_SLIDE_REPAIR_ATTEMPTS = int(os.environ.get("MAX_SLIDE_REPAIR_ATTEMPTS", "2"))
+# Research is a task-level singleton for its SUCCESS state (one active ready
+# Research), but a first timeout/crash/blocked must not permanently exhaust the
+# slot — allow a bounded controlled recovery.
+MAX_RESEARCH_ATTEMPTS = int(os.environ.get("MAX_RESEARCH_ATTEMPTS", "2"))
 MAX_SPAWN_DEPTH = int(os.environ.get("MAX_SPAWN_DEPTH", "1"))           # 委派深度上限(1 = 只有顶层能委派)
 # Vision 不设“单 Agent 累计看图数”上限。一张图在紧随的模型回合被看到后，
 # 便从**活跃模型上下文**里释放；真实像素仍由 Trace 快照永久保留。因此 36/80
@@ -1445,7 +1449,7 @@ def run_loop(agent):
 # ============= 委派子 agent(自由函数,操作一个 agent) =============
 
 def _normalize_task(t):
-    """归一化 sn-ppt-web 的子任务并补齐角色必需能力。"""
+    """归一化 Long-Horizon Presenter 的子任务并补齐角色必需能力。"""
     if not isinstance(t, dict):
         t = {"goal": str(t)}
     goal = str(t.get("goal") or "")
@@ -1497,10 +1501,16 @@ def _normalize_task(t):
 
 
 def _task_kind(label, goal):
-    """Resolve role identity before inspecting incidental words in task prose."""
+    """Resolve role identity from explicit signals only.
+
+    Priority: label prefix > bracket role tag > an explicit role header on the
+    FIRST non-empty line (e.g. ``Slides: build ...`` / ``Review: ...``).  Incidental
+    occurrences of ``Slides:`` / ``Review:`` deeper inside the prose must never
+    decide the role — otherwise an unlabelled Image task that merely mentions
+    "for Slides: 1-3" would be misclassified and lose its image_gen/web tools.
+    """
     label_text = str(label or "").strip().lower()
     goal_text = str(goal or "")
-    text = goal_text.lower()
     for prefix, kind in (
         ("slide", "slide"), ("image", "image"), ("research", "research"),
         ("material", "material"), ("review", "review"),
@@ -1513,16 +1523,23 @@ def _task_kind(label, goal):
     )
     if tagged:
         return tagged.group(1).lower()
-    if re.search(r"\bslides?(?:\s+group|\s+\d|\s*:)", text):
+    # Explicit role header, but only on the first non-empty line.
+    first_line = ""
+    for line in goal_text.splitlines():
+        if line.strip():
+            first_line = line.strip()
+            break
+    head = first_line.lower()
+    if re.match(r"slides?(?:\s+group|\s+\d|\s*:)", head):
         return "slide"
-    if re.search(r"(?:^|\n)\s*image\s*:", text):
+    if re.match(r"image\s*:", head):
         return "image"
-    if re.search(r"(?:^|\n)\s*research\s*:", text):
+    if re.match(r"research\s*:", head):
         return "research"
-    if re.search(r"(?:^|\n)\s*material\s*:", text):
+    if re.match(r"material\s*:", head):
         return "material"
-    if (re.search(r"(?:^|\n)\s*(?:final\s+)?review\s*:", text)
-            or re.search(r"\bmode\s*=\s*(?:final_review|simple_edit)\b", text)):
+    if (re.match(r"(?:final\s+)?review\s*:", head)
+            or re.match(r"mode\s*=\s*(?:final_review|simple_edit)\b", head)):
         return "review"
     return "other"
 
@@ -1532,7 +1549,8 @@ def _role_card_context(skills_root, kind, prompt_language="zh", skill_name=""):
     if kind not in {"research", "material", "image", "slide", "review"}:
         return ""
     selected_skill = str(skill_name or "").strip() or (
-        "sn-ppt-web-en" if str(prompt_language or "").lower() == "en" else "sn-ppt-web-zh"
+        "sn-ppt-web-en" if str(prompt_language or "").lower() == "en"
+        else "sn-ppt-web-zh"
     )
     path = f"skills/{selected_skill}/subagents/{kind}.md"
     if str(prompt_language or "").lower() == "en":
@@ -1885,6 +1903,13 @@ def _build_child(parent, task):
         ident = f"你的身份是 {name};完成后在总结首句声明你的身份与产出。\n\n"
         context_label = "背景"
     kind = _task_kind(name, task.get("goal"))
+    # Atomic start reservation BEFORE the Agent/Trace is built — the sub_dir path
+    # is deterministic (subagents/<name>), so a crash between here and the
+    # terminal record is still visible on restart (counted → next _rN, never a
+    # silent same-name reuse).  The Agent below reuses this exact directory.
+    _assigned_pages = _slide_group_pages(task) if kind == "slide" else []
+    _reserved_sub_dir = os.path.join(parent.ws, "_trace", "subagents", name)
+    _write_attempt_start(parent.ws, _reserved_sub_dir, name, base, c, kind, _assigned_pages)
     role_card = _role_card_context(
         parent.skills_root,
         kind,
@@ -1909,7 +1934,7 @@ def _build_child(parent, task):
                   skills_root=parent.skills_root,
                   forbid_write_prefixes=None)        # 子 agent 默认无写禁区(它们才是真正写产物的)
     child._delegate_depth = parent._delegate_depth + 1
-    child._assigned_pages = _slide_group_pages(task) if kind == "slide" else []
+    child._assigned_pages = _assigned_pages
     if kind == "review":
         review_text = f"{task.get('goal') or ''}\n{task.get('context') or ''}"
         child._expected_review_mode = (
@@ -1939,12 +1964,22 @@ def _build_child(parent, task):
 # which wrongly demanded an Alpha cutout and blocked Slide dispatch (deck 449).
 _TRANSPARENCY_REQUEST_RE = re.compile(
     r"(?i)(?:"
+    # Authoritative machine fields.
     r"subject[_ -]?only\s*[:=]\s*true"
     r"|presentation\s*[:=]\s*[`'\"]?subject[_ -]?only"
     r"|expect[_ -]?transparent\s*[:=]\s*true"
     r"|needs?[_ -]?(?:transparent|cutout|alpha)\s*[:=]\s*true"
-    r"|transparent[_ -]background\s+(?:required|needed|必须|必需)"
-    r"|主体透明|透明背景素材|需要抠图|需要去背|抠图交付"
+    r"|transparent[_ -]background\s+(?:required|needed)"
+    # Explicit CJK cutout semantics ONLY — the exact phrases that mean "deliver an
+    # isolated subject / alpha cutout".  Deliberately NOT triggered by:
+    #   · the echoed contract field name ``transparent_assets``
+    #   · an English material description ("transparent acrylic")
+    #   · a material-quality mention ``透明感`` / a loose ``要透明…质感``
+    # while still triggering on the normal ``需要透明背景`` / ``主体需要透明``.
+    r"|透明背景|背景透明"          # transparent background (as a cutout requirement)
+    r"|主体透明|透明主体"          # transparent subject
+    r"|主体需要透明|需要主体透明"
+    r"|抠图|去背|去背景|退底|扣像"  # cut-out / knock-out verbs
     r")"
 )
 _TRANSPARENT_ASSETS_RE = re.compile(
@@ -2021,7 +2056,7 @@ _HANDOFF_ARTIFACT_RE = re.compile(
 )
 
 
-def _child_handoff(parent, child, name, clean, contract):
+def _child_handoff(parent, child, name, clean, contract, accept_fields=None):
     """Persist the exact final response, but return only a lossless compact handoff.
 
     The parent needs verdict fields and artifact locations, not the child's full
@@ -2037,6 +2072,11 @@ def _child_handoff(parent, child, name, clean, contract):
             artifacts.append(value)
     trace_rel = os.path.relpath(child.trace.sub_dir, parent.ws).replace(os.sep, "/")
     handoff_rel = f"{trace_rel}/handoff.json"
+    base_label = re.sub(r"_r\d+$", "", str(name))
+    attempt = 1
+    attempt_match = re.search(r"_r(\d+)$", str(name))
+    if attempt_match:
+        attempt = int(attempt_match.group(1))
     payload = {
         "label": name,
         "clean": bool(clean),
@@ -2046,7 +2086,26 @@ def _child_handoff(parent, child, name, clean, contract):
         "final_response": final_text,
         "vision_paths": list(getattr(child, "vision_paths", []) or []),
         "vision_evidence": dict(getattr(child, "vision_evidence", {}) or {}),
+        # Self-describing fields so worker state can be rebuilt from disk after a
+        # restart without the original task object (durable-state layer).
+        "kind": _task_kind(name, None),
+        "assigned_pages": list(getattr(child, "_assigned_pages", []) or []),
+        "attempt": attempt,
+        "base_label": base_label,
+        "ts": time.time(),
     }
+    # Persist the FULL machine-acceptance record so a late/recovered Slide or
+    # Review handoff is not judged blind by the final acceptance consumers
+    # (renders / vision_calls / inspected_pages / stale_pixel_pages /
+    # dirty_visual_sources / machine_refine_rounds / trace_dir / shot).
+    if accept_fields:
+        for key in (
+            "renders", "vision_calls", "trace_dir", "inspected_pages",
+            "stale_pixel_pages", "dirty_visual_sources", "machine_refine_rounds",
+            "shot", "nova_raw_precheck", "resume_of",
+        ):
+            if key in accept_fields:
+                payload[key] = accept_fields[key]
     handoff_path = os.path.join(child.trace.sub_dir, "handoff.json")
     temporary = handoff_path + f".{os.getpid()}.{threading.get_ident()}.tmp"
     with open(temporary, "w", encoding="utf-8") as stream:
@@ -2055,6 +2114,18 @@ def _child_handoff(parent, child, name, clean, contract):
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temporary, handoff_path)
+    _append_worker_ledger(parent.ws, {
+        "ts": payload["ts"],
+        "label": name,
+        "base": base_label,
+        "kind": payload["kind"],
+        "attempt": attempt,
+        "clean": bool(clean),
+        "contract_status": str((contract or {}).get("status") or "").lower(),
+        "assigned_pages": payload["assigned_pages"],
+        "handoff": handoff_rel,
+        "abandoned": False,
+    })
     return {
         "label": name,
         "status": "ok" if clean else "issues",
@@ -2067,6 +2138,470 @@ def _child_handoff(parent, child, name, clean, contract):
         "vision_evidence_path": f"{trace_rel}/vision-evidence.json",
         "shot": child.last_shot,
     }
+
+
+def _write_attempt_start(ws, sub_dir, name, base, attempt, kind, assigned_pages):
+    """Atomically record that an attempt has STARTED, before it runs.
+
+    A crash between trace creation and the terminal handoff/failure would
+    otherwise be invisible on restart, risking a silent same-name reuse.  The
+    ``start.json`` reservation is a HARD requirement — if it cannot be atomically
+    persisted, this raises and the caller MUST NOT construct the Agent (fail
+    closed).  Only the advisory ledger append is best-effort.
+    """
+    os.makedirs(sub_dir, exist_ok=True)
+    start_path = os.path.join(sub_dir, "start.json")
+    payload = {
+        "label": name, "base_label": base, "attempt": int(attempt),
+        "kind": kind, "assigned_pages": list(assigned_pages or []),
+        "ts": time.time(), "event": "start",
+    }
+    temporary = start_path + f".{os.getpid()}.{threading.get_ident()}.tmp"
+    with open(temporary, "w", encoding="utf-8") as stream:
+        json.dump(payload, stream, ensure_ascii=False)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, start_path)   # atomic; raises on failure → fail closed
+    _append_worker_ledger(ws, {
+        "ts": time.time(), "label": name, "base": base, "kind": kind,
+        "attempt": int(attempt), "clean": None, "contract_status": "",
+        "assigned_pages": list(assigned_pages or []), "handoff": "",
+        "event": "start",
+    })
+
+
+def _append_worker_ledger(ws, entry):
+    """Append one JSONL event to _trace/worker-ledger.jsonl (advisory, never raises).
+
+    Append-only sidesteps read-modify-write races: each worker thread only ever
+    appends its own terminal event.  The reader tolerates a torn final line.
+    """
+    try:
+        path = os.path.join(ws, "_trace", "worker-ledger.jsonl")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as stream:
+            stream.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError:
+        pass
+
+
+def _read_worker_ledger(ws):
+    """Return parsed ledger events, skipping any unparseable (torn) line."""
+    path = os.path.join(ws, "_trace", "worker-ledger.jsonl")
+    events = []
+    try:
+        with open(path, encoding="utf-8") as stream:
+            for line in stream:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return events
+
+
+def _rebuild_worker_state(ws):
+    """Rebuild the orchestrator's in-memory worker view from durable disk truth.
+
+    Sources (preference order per concrete label): handoff.json (the worker
+    actually finished and wrote real truth — this recovers a late/abandoned
+    completion) > worker-failures/<label>.json > worker-ledger.jsonl.  Attempts
+    are grouped by base label; the highest-attempt / latest attempt per base is
+    ``active`` and older attempts are marked ``superseded_by`` it.  Returns a dict
+    with worker_recs / spawn_count / role_spawn_count / slide_page_owners shaped
+    exactly like the live in-memory structures so every consumer works unchanged.
+    """
+    by_label = {}   # concrete label -> rec dict
+
+    def _consider(label, rec, priority):
+        prior = by_label.get(label)
+        if prior is None or priority > prior["_priority"]:
+            rec["_priority"] = priority
+            by_label[label] = rec
+
+    # 1) durable handoffs (highest priority — real completion truth)
+    for path in glob.glob(os.path.join(ws, "_trace", "subagents", "*", "handoff.json")):
+        try:
+            with open(path, encoding="utf-8") as stream:
+                payload = json.load(stream)
+        except (OSError, ValueError, TypeError):
+            continue
+        label = str(payload.get("label") or os.path.basename(os.path.dirname(path)))
+        _consider(label, {
+            "label": label,
+            "_source": "handoff",
+            "kind": str(payload.get("kind") or _task_kind(label, None)),
+            "clean": bool(payload.get("clean")),
+            "contract": payload.get("contract") or {},
+            "assigned_pages": list(payload.get("assigned_pages") or []),
+            "exit_reason": payload.get("exit_reason"),
+            "vision_paths": list(payload.get("vision_paths") or []),
+            "vision_evidence": dict(payload.get("vision_evidence") or {}),
+            "attempt": int(payload.get("attempt") or _attempt_of(label)),
+            "ts": float(payload.get("ts") or 0.0),
+            # Full machine-acceptance record so a rebuilt late/recovered Slide or
+            # Review rec is judged with real evidence, not blind defaults.
+            "renders": int(payload.get("renders") or 0),
+            "vision_calls": int(payload.get("vision_calls") or 0),
+            "trace_dir": payload.get("trace_dir")
+            or os.path.relpath(os.path.dirname(path), ws).replace(os.sep, "/"),
+            "inspected_pages": list(payload.get("inspected_pages") or []),
+            "stale_pixel_pages": list(payload.get("stale_pixel_pages") or []),
+            "dirty_visual_sources": list(payload.get("dirty_visual_sources") or []),
+            "machine_refine_rounds": int(payload.get("machine_refine_rounds") or 0),
+            "shot": payload.get("shot"),
+        }, priority=3)
+
+    # 2) worker-failures (timeout/crash records)
+    for path in glob.glob(os.path.join(ws, "_trace", "worker-failures", "*.json")):
+        try:
+            with open(path, encoding="utf-8") as stream:
+                payload = json.load(stream)
+        except (OSError, ValueError, TypeError):
+            continue
+        label = str(payload.get("label") or os.path.splitext(os.path.basename(path))[0])
+        _consider(label, {
+            "label": label,
+            "_source": "failure",
+            "kind": str(payload.get("kind") or _task_kind(label, None)),
+            "clean": bool(payload.get("clean")),
+            "contract": payload.get("contract") or {"status": "blocked"},
+            "assigned_pages": list(payload.get("assigned_pages") or []),
+            "exit_reason": payload.get("exit_reason") or "failed",
+            "vision_paths": [],
+            "vision_evidence": {},
+            "attempt": int(payload.get("attempt") or _attempt_of(label)),
+            "ts": float(payload.get("ts") or 0.0),
+        }, priority=2)
+
+    # 2.5) start markers — an attempt whose trace was created but never reached a
+    # terminal handoff/failure (crash/interruption).  Lowest priority: a handoff
+    # or failure for the same label overrides it.  Left as active-and-not-clean it
+    # is an interrupted attempt, counted so restart issues the next _rN and never
+    # silently reuses the same name.
+    for path in glob.glob(os.path.join(ws, "_trace", "subagents", "*", "start.json")):
+        try:
+            with open(path, encoding="utf-8") as stream:
+                payload = json.load(stream)
+        except (OSError, ValueError, TypeError):
+            continue
+        label = str(payload.get("label") or os.path.basename(os.path.dirname(path)))
+        _consider(label, {
+            "label": label,
+            "_source": "start",
+            "kind": str(payload.get("kind") or _task_kind(label, None)),
+            "clean": False,
+            "contract": {"status": "blocked", "validation_error": "interrupted (no terminal record)"},
+            "assigned_pages": list(payload.get("assigned_pages") or []),
+            "exit_reason": "interrupted",
+            "vision_paths": [],
+            "vision_evidence": {},
+            "attempt": int(payload.get("attempt") or _attempt_of(label)),
+            "ts": float(payload.get("ts") or 0.0),
+            "interrupted": True,
+        }, priority=0)
+
+    # 3) ledger — fills kind/pages/ts for older handoffs and orders events
+    for event in _read_worker_ledger(ws):
+        label = str(event.get("label") or "")
+        if not label:
+            continue
+        if str(event.get("event") or "") == "start":
+            # A start event is only a reservation; the start.json scan above
+            # already represents an orphan attempt.  A terminal ledger row (with
+            # a real clean flag) for the same label supersedes it.
+            continue
+        existing = by_label.get(label)
+        if existing is not None:
+            if not existing.get("ts") and event.get("ts"):
+                existing["ts"] = float(event.get("ts") or 0.0)
+            if not existing.get("assigned_pages") and event.get("assigned_pages"):
+                existing["assigned_pages"] = list(event.get("assigned_pages") or [])
+            continue
+        _consider(label, {
+            "label": label,
+            "_source": "ledger",
+            "kind": str(event.get("kind") or _task_kind(label, None)),
+            "clean": bool(event.get("clean")),
+            "contract": {"status": str(event.get("contract_status") or "")},
+            "assigned_pages": list(event.get("assigned_pages") or []),
+            "exit_reason": "ledger",
+            "vision_paths": [],
+            "vision_evidence": {},
+            "attempt": int(event.get("attempt") or _attempt_of(label)),
+            "ts": float(event.get("ts") or 0.0),
+        }, priority=1)
+
+    recs = list(by_label.values())
+    for rec in recs:
+        rec.pop("_priority", None)
+    # Group by base; latest attempt (then latest ts) per base is active.
+    groups = {}
+    for rec in recs:
+        base = _base_label(rec["label"])
+        rec["_base"] = base
+        groups.setdefault(base, []).append(rec)
+    spawn_count = {}
+    slide_page_owners = {}
+    role_spawn_count = {}
+    for base, attempts in groups.items():
+        active = max(attempts, key=lambda r: (
+            int(r.get("attempt") or _attempt_of(r.get("label"))),
+            float(r.get("ts") or 0.0),
+            str(r.get("label") or ""),
+        ))
+        max_attempt = max(int(r.get("attempt") or _attempt_of(r.get("label"))) for r in attempts)
+        spawn_count[base] = max_attempt
+        for older in attempts:
+            if older is active:
+                continue
+            older["superseded_by"] = active["label"]
+            older["recovered"] = bool(active.get("clean"))
+        kind = str(active.get("kind") or "")
+        if kind in {"research", "review"}:
+            # Budget by the HIGHEST attempt already allocated for this base (not the
+            # count of records) so a sparse history — e.g. review_r3 with a missing
+            # review_r2 — is charged as 3, never mis-counted as 1 and re-allowed.
+            role_spawn_count[kind] = role_spawn_count.get(kind, 0) + max_attempt
+        if kind == "slide":
+            for page in active.get("assigned_pages") or []:
+                try:
+                    slide_page_owners[int(page)] = base
+                except (TypeError, ValueError):
+                    continue
+    recs.sort(key=lambda r: (float(r.get("ts") or 0.0),
+                             int(r.get("attempt") or _attempt_of(r.get("label"))),
+                             str(r.get("label"))))
+    for rec in recs:
+        rec.pop("_base", None)
+    return {
+        "worker_recs": recs,
+        "spawn_count": spawn_count,
+        "role_spawn_count": role_spawn_count,
+        "slide_page_owners": slide_page_owners,
+    }
+
+
+def _attempt_of(label):
+    match = re.search(r"_r(\d+)$", str(label or ""))
+    return int(match.group(1)) if match else 1
+
+
+def _base_label(label):
+    return re.sub(r"_r\d+$", "", str(label or ""))
+
+
+def _effective_active_recs(worker_recs, *, kind=None, label_prefix=None):
+    """Deterministically pick the effective ACTIVE attempt per base label.
+
+    Shared by every acceptance/gate consumer so the choice never depends on input
+    order or a stale ``superseded_by`` flag.  Within each base label the winner is
+    the highest ``(attempt, ts, label)`` — recomputed here, not read from the
+    record — so out-of-order input yields the same result.  Returns the active
+    rec for each base, optionally filtered by kind and/or label prefix.
+    """
+    groups = {}
+    for rec in worker_recs or []:
+        label = str(rec.get("label") or "")
+        if not label:
+            continue
+        groups.setdefault(_base_label(label), []).append(rec)
+    active = []
+    for base, attempts in groups.items():
+        chosen = max(
+            attempts,
+            key=lambda r: (
+                int(r.get("attempt") or _attempt_of(r.get("label"))),
+                float(r.get("ts") or 0.0),
+                str(r.get("label") or ""),
+            ),
+        )
+        active.append(chosen)
+    if kind is not None:
+        active = [r for r in active if str(r.get("kind") or "").lower() == kind
+                  or str(r.get("label") or "").lower().startswith(kind)]
+    if label_prefix is not None:
+        active = [r for r in active
+                  if str(r.get("label") or "").lower().startswith(label_prefix)]
+    active.sort(key=lambda r: (
+        float(r.get("ts") or 0.0),
+        int(r.get("attempt") or _attempt_of(r.get("label"))),
+        str(r.get("label") or ""),
+    ))
+    return active
+
+
+def _active_workers_from_disk(ws, kind_prefix, *, clean_source_only=False):
+    """Return the *active* (effective per-base) rebuilt recs matching ``kind_prefix``.
+
+    ``clean_source_only``: for a completion/clean judgement, a rec's ``clean`` flag
+    may only be trusted when it came from a real ``handoff.json`` (``_source ==
+    'handoff'``).  A ledger/start/failure-sourced ``clean`` is a recovery/diagnostic
+    hint, never proof of completion.  When set, any non-handoff active rec is
+    downgraded to not-clean so it can never fabricate a completed Image stage.
+    """
+    state = _rebuild_worker_state(ws)
+    active = _effective_active_recs(state["worker_recs"], kind=kind_prefix)
+    if clean_source_only:
+        safe = []
+        for rec in active:
+            if rec.get("clean") and rec.get("_source") != "handoff":
+                rec = dict(rec)
+                rec["clean"] = False
+            safe.append(rec)
+        active = safe
+    return active
+
+
+def _hydrate_orchestrator_state(orch):
+    """Rebuild worker_recs / spawn counts / page ownership from disk on restart.
+
+    No-op for non-orchestrators, when the in-memory list is already populated
+    (never clobber a live run), or when no durable worker artifacts exist.
+    """
+    if str(getattr(orch, "role", "") or "").lower() != "orchestrator":
+        return
+    if getattr(orch, "worker_recs", None):
+        return
+    ws = getattr(orch, "ws", None)
+    if not ws:
+        return
+    has_state = (
+        glob.glob(os.path.join(ws, "_trace", "subagents", "*", "handoff.json"))
+        or glob.glob(os.path.join(ws, "_trace", "subagents", "*", "start.json"))
+        or glob.glob(os.path.join(ws, "_trace", "worker-failures", "*.json"))
+        or os.path.isfile(os.path.join(ws, "_trace", "worker-ledger.jsonl"))
+    )
+    if not has_state:
+        return
+    state = _rebuild_worker_state(ws)
+    lock = getattr(orch, "_spawn_lock", None)
+    if lock is None:
+        lock = _NullContext()
+    with lock:
+        orch.worker_recs = state["worker_recs"]
+        orch._spawn_count = dict(state["spawn_count"])
+        orch._role_spawn_count = dict(state["role_spawn_count"])
+        orch._slide_page_owners = dict(state["slide_page_owners"])
+
+
+def _reconcile_worker_recs(orch):
+    """Fold durable disk truth into the live in-memory worker_recs (idempotent).
+
+    Called before every dispatch gate and before final acceptance so that a late
+    completion (a timed-out/abandoned worker that later wrote a clean handoff),
+    an out-of-band repaired handoff, or an interrupted-then-restarted attempt is
+    reflected, without the orchestrator hand-editing memory.  Rules:
+      - For a label present both in memory and on disk, the disk record wins when
+        it is clean+ready and the memory record is not (late/repair recovery).
+      - Disk-only labels (e.g. an orphan-start whose thread never rejoined) are
+        appended so gates and acceptance can see and supersede them.
+      - Never downgrade a live clean in-memory rec with stale disk data.
+    Active/superseded is then recomputed by the shared grouping so every consumer
+    reads a consistent view.  Thread-safe under _spawn_lock; safe to call often.
+    """
+    ws = getattr(orch, "ws", None)
+    if not ws:
+        return
+    disk = _rebuild_worker_state(ws)
+    disk_by_label = {str(r.get("label")): r for r in disk["worker_recs"]}
+    lock = getattr(orch, "_spawn_lock", None) or _NullContext()
+    with lock:
+        mem = list(getattr(orch, "worker_recs", []) or [])
+        merged = []
+        seen = set()
+        for rec in mem:
+            label = str(rec.get("label"))
+            seen.add(label)
+            disk_rec = disk_by_label.get(label)
+            mem_clean = bool(rec.get("clean"))
+            # Trust ONLY a real handoff's machine clean flag for promotion — a
+            # ledger-only "clean" (no handoff on disk) must not fabricate a
+            # completion.  ``clean=True`` is the promotion signal, not a single
+            # status enum: a late Research finishing clean+partial (or clean with
+            # sparse contract fields but a valid brief) must also be promoted.
+            disk_handoff_clean = bool(
+                disk_rec
+                and disk_rec.get("_source") == "handoff"
+                and disk_rec.get("clean")
+            )
+            if disk_handoff_clean and not mem_clean:
+                # Late/repair completion recovered from disk supersedes the stale
+                # in-memory (abandoned/blocked) record for the same attempt.  Take
+                # the disk record's fields (real machine-acceptance evidence) but
+                # keep any live-only fields the memory rec had.
+                promoted = dict(rec)
+                promoted.update(disk_rec)
+                merged.append(promoted)
+            else:
+                merged.append(rec)
+        for label, disk_rec in disk_by_label.items():
+            if label not in seen:
+                merged.append(disk_rec)
+        # Recompute active/superseded deterministically (highest attempt/ts/label
+        # per base wins) so gates and acceptance never depend on list order.
+        groups = {}
+        for rec in merged:
+            rec.pop("superseded_by", None)
+            rec.pop("recovered", None)
+            groups.setdefault(_base_label(rec.get("label")), []).append(rec)
+        role_spawn = {}
+        page_owners = {}
+        spawn_count = dict(getattr(orch, "_spawn_count", {}) or {})
+        for base, attempts in groups.items():
+            active = max(attempts, key=lambda r: (
+                int(r.get("attempt") or _attempt_of(r.get("label"))),
+                float(r.get("ts") or 0.0),
+                str(r.get("label") or ""),
+            ))
+            max_attempt = max(
+                int(r.get("attempt") or _attempt_of(r.get("label"))) for r in attempts)
+            for older in attempts:
+                if older is active:
+                    continue
+                older["superseded_by"] = active["label"]
+                older["recovered"] = bool(active.get("clean"))
+            spawn_count[base] = max(spawn_count.get(base, 0), max_attempt)
+            kind = str(active.get("kind") or _task_kind(active.get("label"), None))
+            if kind in {"research", "review"}:
+                # Budget by the highest allocated attempt per base (sparse-safe).
+                role_spawn[kind] = role_spawn.get(kind, 0) + max_attempt
+            if kind == "slide":
+                for page in active.get("assigned_pages") or []:
+                    try:
+                        page_owners[int(page)] = base
+                    except (TypeError, ValueError):
+                        continue
+        # Deterministic global ordering so consumers using "latest" are stable.
+        merged.sort(key=lambda r: (float(r.get("ts") or 0.0),
+                                   int(r.get("attempt") or _attempt_of(r.get("label"))),
+                                   str(r.get("label") or "")))
+        orch.worker_recs = merged
+        orch._spawn_count = spawn_count
+        # Keep the max of live and reconciled role counts (never lose a live
+        # dispatch that has not yet written a terminal record).
+        live_roles = dict(getattr(orch, "_role_spawn_count", {}) or {})
+        for kind, count in role_spawn.items():
+            live_roles[kind] = max(int(live_roles.get(kind, 0) or 0), count)
+        orch._role_spawn_count = live_roles
+        merged_owners = dict(getattr(orch, "_slide_page_owners", {}) or {})
+        merged_owners.update(page_owners)
+        orch._slide_page_owners = merged_owners
+
+
+class _NullContext:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
 
 
 _PRODUCTION_GROUP_RE = re.compile(
@@ -2293,10 +2828,67 @@ _IMAGE_OPPORTUNITY_LINE_RE = re.compile(
 _PLAN_ASSET_ID_RE = re.compile(
     r"(?i)\basset[_ -]?id\b\s*[:=]\s*[`'\"]?([A-Za-z0-9._-]+)"
 )
+_PLAN_PRESENTATION_RE = re.compile(
+    r"(?im)^\s*[-*+]?\s*(?:\*\*)?presentation(?:\*\*)?\s*[:：]\s*`?([A-Za-z-]+)"
+)
+_PLAN_SUBJECT_ONLY_RE = re.compile(
+    r"(?im)^\s*[-*+]?\s*(?:\*\*)?subject_only(?:\*\*)?\s*[:：]\s*true\s*$"
+)
+# Kept in lock-step with deck.py: a real raster asset path in the visual section
+# is authoritative bitmap evidence, and a raster medium string is a legacy
+# fallback when image_opportunity is absent.
+_PLAN_RASTER_PATH_RE = re.compile(
+    r"(?i)assets/[A-Za-z0-9_./-]+\.(?:png|jpe?g|webp|gif)"
+)
+_PLAN_RASTER_MEDIUM_RE = re.compile(
+    r"(?im)^\s*[-*+]\s*medium\s*[:：]"
+    r".*(?:photo|photograph|generated[ -]?image|bitmap|raster|生成图|照片"
+    r"|(?<![无不])位图)"
+)
+# Visual-implementation section headings (mirror deck.py VISUAL_HEADINGS) so
+# raster-path detection is scoped there and never false-matches a speech/source
+# section that happens to mention a path.
+_VISUAL_HEADINGS = {
+    "视觉实现", "visual implementation", "visual handoff", "visual direction",
+}
+
+
+def _plan_visual_section(text):
+    """Return the visual-implementation section body, or "" when it is absent.
+
+    Mirrors deck.py ``_first_section(..., VISUAL_HEADINGS)``: no visual heading →
+    empty string (never the whole document), so a path/presentation that only
+    appears in a speech/source section is never read as visual-implementation
+    content.
+    """
+    matches = list(re.finditer(r"(?m)^##\s+(.+?)\s*$", text))
+    for index, match in enumerate(matches):
+        heading = re.sub(r"\s+", " ", match.group(1).strip().lower()).rstrip(":：")
+        if heading in _VISUAL_HEADINGS:
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+            return text[match.end():end]
+    return ""
+
+
+_IMAGE_PRESENTATIONS = {"subject-only", "framed-scene", "full-bleed", "evidence-crop"}
 _NO_BITMAP_VALUES = {
     "none", "no", "code", "code_only", "code-only", "canvas",
     "canvas_only", "canvas-only", "chart", "chart_only", "chart-only",
     "typography", "typography_only", "typography-only",
+}
+# CJK ways plans express "no bitmap on this page".  Language-model plans often
+# write the machine field in Chinese (``image_opportunity: 无位图``) instead of
+# the English enum; both the startup dispatch gate and the distill final
+# acceptance must read these as no-bitmap, exactly like ``none``.
+_NO_BITMAP_CJK_RE = re.compile(
+    r"^(?:无|none|无需|不需|不用)?"
+    r"(?:位图|配图|图片|图像|插图|图)?"
+    r"(?:需求|机会)?$"
+)
+_NO_BITMAP_CJK_VALUES = {
+    "无", "无位图", "无需配图", "不需配图", "无需图片", "无需图像",
+    "无需插图", "无图", "无需位图", "不需要配图", "不需要图片", "无配图",
+    "无位图需求", "无配图需求",
 }
 _BITMAP_EXCEPTION_BASES = {
     "explicit_user_request", "pure_typography", "pure_chart", "wireframe",
@@ -2319,6 +2911,30 @@ def _normalize_image_opportunity(raw_value):
     return re.split(r"[\s,，;；(/（]", value, maxsplit=1)[0]
 
 
+def _image_opportunity_needs_bitmap(raw_value):
+    """Single source of truth for whether a page declares a bitmap opportunity.
+
+    Both the pre-Slide dispatch gate (``agent``) and the distill final
+    acceptance (``distill_ppt``) call this so the two never diverge.  A page
+    needs a bitmap unless its declared opportunity is a no-bitmap enum (``none``,
+    ``chart_only`` …) or an equivalent CJK phrase (``无位图``、``无需配图``).
+    """
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return False
+    normalized = _normalize_image_opportunity(raw)
+    if normalized in _NO_BITMAP_VALUES:
+        return False
+    # CJK "none" phrasing: strip trailing human explanation after punctuation,
+    # then compare the leading token against known no-bitmap phrases.
+    cjk_head = re.split(r"[\s,，;；:：(/（]", raw, maxsplit=1)[0].strip()
+    if cjk_head in _NO_BITMAP_CJK_VALUES:
+        return False
+    if _NO_BITMAP_CJK_RE.fullmatch(cjk_head) and re.search(r"[无不]", cjk_head):
+        return False
+    return True
+
+
 def _slide_image_plan(ws):
     """Read the frozen per-page bitmap decision and stable asset references."""
     plans = []
@@ -2331,16 +2947,32 @@ def _slide_image_plan(ws):
                 text = stream.read()
         except OSError:
             continue
+        # image_opportunity is a whole-doc machine field (same as deck.py, which
+        # reads it from the full text); everything else about the *bitmap* — the
+        # presentation contract, subject_only flag, raster asset path and raster
+        # medium — is parsed ONLY from the visual-implementation section so a
+        # speech/source section can never supply or satisfy the contract.
         opportunity = _IMAGE_OPPORTUNITY_LINE_RE.search(text)
         raw_value = opportunity.group(1).strip() if opportunity else ""
         normalized = _normalize_image_opportunity(raw_value)
-        needs_bitmap = bool(raw_value) and normalized not in _NO_BITMAP_VALUES
+        needs_bitmap = _image_opportunity_needs_bitmap(raw_value)
+        visual = _plan_visual_section(text)
+        presentation_match = _PLAN_PRESENTATION_RE.search(visual)
+        presentation = (
+            presentation_match.group(1).lower() if presentation_match else ""
+        )
+        has_raster_asset = bool(_PLAN_RASTER_PATH_RE.search(visual))
+        has_raster_medium = bool(_PLAN_RASTER_MEDIUM_RE.search(visual))
         plans.append({
             "page": int(match.group(1)),
             "declared": bool(opportunity),
             "image_opportunity": normalized,
             "needs_bitmap": needs_bitmap,
+            "presentation": presentation,
+            "subject_only": bool(_PLAN_SUBJECT_ONLY_RE.search(visual)),
             "asset_ids": sorted(set(_PLAN_ASSET_ID_RE.findall(text))),
+            "has_raster_asset": has_raster_asset,
+            "has_raster_medium": has_raster_medium,
         })
     return plans
 
@@ -2375,6 +3007,35 @@ def _bitmap_exception_error(ws, plans):
     return None
 
 
+def _catalog_active_by_id(entries):
+    """Index catalog entries by asset_id using ACTIVE-only, order-independent rules.
+
+    A catalog legitimately keeps history: the same ``asset_id`` may appear once as
+    ``rejected``/``superseded`` (an earlier candidate) and once ``ready`` (the
+    chosen asset).  Return ``{asset_id: (entry_or_None, status)}`` where status is:
+      - "ok"        exactly one active (non-rejected) entry → that entry
+      - "ambiguous" more than one active entry with the same id → None
+      - "rejected"  only rejected/superseded entries exist → None
+    Array order never changes the result.
+    """
+    dead = {"rejected", "superseded", "replaced"}
+    grouped = {}
+    for item in entries:
+        if not isinstance(item, dict) or not item.get("asset_id"):
+            continue
+        grouped.setdefault(str(item.get("asset_id")), []).append(item)
+    resolved = {}
+    for asset_id, items in grouped.items():
+        active = [it for it in items if str(it.get("status") or "").lower() not in dead]
+        if not active:
+            resolved[asset_id] = (None, "rejected")
+        elif len(active) > 1:
+            resolved[asset_id] = (None, "ambiguous")
+        else:
+            resolved[asset_id] = (active[0], "ok")
+    return resolved
+
+
 def _catalog_asset_error(ws, required_ids):
     """Require each frozen asset id to resolve to a ready file inside the workspace."""
     catalog_path = os.path.join(ws, "assets", "catalog.json")
@@ -2386,15 +3047,15 @@ def _catalog_asset_error(ws, required_ids):
             raise TypeError("assets is not a list")
     except (OSError, ValueError, TypeError) as exc:
         return f"Image Agent 素材清单 assets/catalog.json 无法验收: {type(exc).__name__}"
-    by_id = {
-        str(item.get("asset_id")): item for item in entries
-        if isinstance(item, dict) and item.get("asset_id")
-    }
-    missing, invalid = [], []
+    resolved = _catalog_active_by_id(entries)
+    missing, invalid, ambiguous = [], [], []
     root = os.path.abspath(ws)
     for asset_id in sorted(required_ids):
-        item = by_id.get(asset_id)
-        if not item:
+        item, state = resolved.get(asset_id, (None, "missing"))
+        if state == "ambiguous":
+            ambiguous.append(asset_id)
+            continue
+        if item is None:
             missing.append(asset_id)
             continue
         raw_path = str(item.get("path") or "").strip()
@@ -2407,34 +3068,83 @@ def _catalog_asset_error(ws, required_ids):
         if str(item.get("status") or "").lower() != "ready" or not inside \
                 or not os.path.isfile(actual):
             invalid.append(asset_id)
-    if missing or invalid:
-        return f"Image Agent 素材清单未闭环: missing={missing[:8]} not_ready={invalid[:8]}"
+    if missing or invalid or ambiguous:
+        return (
+            "Image Agent 素材清单未闭环: "
+            f"missing={missing[:8]} not_ready={invalid[:8]} ambiguous={ambiguous[:8]}"
+        )
     return None
 
 
 def _disk_image_stage_ready(ws):
     """Persisted-truth fallback for the Image→Slide gate.
 
-    ``parent.worker_recs`` freezes each worker's ``clean`` flag at completion.
-    When an Image stage is corrected afterwards (a re-run image-finalize worker,
-    or a repaired ``handoff.json``), the in-memory record stays stale.  This reads
-    the durable per-worker ``handoff.json`` files so a genuinely ready image stage
-    can clear the gate without the orchestrator hand-editing memory.
+    Trust only real ``handoff.json`` completion (never a ledger/start/failure
+    ``clean``).  Clears the gate only when there is at least one active Image base
+    AND *every* active Image base is clean+ready — a single active blocked base,
+    or a ledger-only clean with no handoff, must not clear it.
     """
-    pattern = os.path.join(ws, "_trace", "subagents", "*", "handoff.json")
-    for path in glob.glob(pattern):
-        label = os.path.basename(os.path.dirname(path))
-        if not str(label).lower().startswith("image"):
+    active = _active_workers_from_disk(ws, "image", clean_source_only=True)
+    if not active:
+        return False
+    return all(
+        bool(rec.get("clean"))
+        and str((rec.get("contract") or {}).get("status") or "").lower() == "ready"
+        for rec in active
+    )
+
+
+def _plan_image_contract_error(ws):
+    """Deterministic per-page image-contract gate, run BEFORE Image/Slide dispatch.
+
+    Aligns with deck.py prepare/build so the run fails here — not at the final
+    build after the whole pipeline ran.  A page is a raster page (and must carry
+    a valid four-enum ``presentation``, plus ``subject_only: true`` for
+    ``subject-only``) when EITHER:
+      - its ``image_opportunity`` machine enum needs a bitmap, OR
+      - the visual section already carries a real raster asset path
+        (``assets/foo.png|jpg|jpeg|webp|gif``) — authoritative bitmap evidence,
+        even if the declared opportunity says ``none``, OR
+      - ``image_opportunity`` is entirely absent but the visual section declares a
+        raster medium (skipped-prepare / legacy plans).
+    A genuinely no-bitmap page (no-bitmap enum, no raster path) is not validated,
+    so ``无位图 (chart+timeline)`` is never a false positive.
+    """
+    plans = _slide_image_plan(ws)
+    bad = []
+    undeclared = [item["page"] for item in plans if not item.get("declared")]
+    if undeclared:
+        bad.append(
+            "缺少机器字段 image_opportunity: pages="
+            + str(undeclared[:12])
+            + "（必须写成单行枚举，不能写成空的 image_opportunity: 块）"
+        )
+    for item in plans:
+        is_raster = (
+            item.get("needs_bitmap")
+            or item.get("has_raster_asset")
+            or (not item.get("declared") and item.get("has_raster_medium"))
+        )
+        if not is_raster:
             continue
-        try:
-            with open(path, encoding="utf-8") as stream:
-                payload = json.load(stream)
-        except (OSError, ValueError, TypeError):
+        presentation = item.get("presentation") or ""
+        if presentation not in _IMAGE_PRESENTATIONS:
+            reason = (
+                "presentation=" + (presentation or "<缺失>") + " 非法(需 "
+                "subject-only|framed-scene|full-bleed|evidence-crop)"
+            )
+            if item.get("has_raster_asset") and not item.get("needs_bitmap"):
+                reason += "；该页已含真实位图路径，即使 image_opportunity=none 也须声明四枚举"
+            bad.append(f"page {item['page']:02d}: {reason}")
             continue
-        status = str((payload.get("contract") or {}).get("status") or "").lower()
-        if bool(payload.get("clean")) and status == "ready":
-            return True
-    return False
+        if presentation == "subject-only" and not item.get("subject_only"):
+            bad.append(f"page {item['page']:02d}: subject-only 需 subject_only: true")
+    if bad:
+        return (
+            "逐页位图展示合同不完整，必须先在 plan/slide_NN.md 修正后再委派 "
+            "Image/Slide：" + "；".join(bad[:12])
+        )
+    return None
 
 
 def _image_before_slide_error(parent, tasks):
@@ -2463,28 +3173,40 @@ def _image_before_slide_error(parent, tasks):
             f"pages={missing_ids[:12]}"
         )
     required_ids = {asset_id for item in image_pages for asset_id in item["asset_ids"]}
-    with parent._spawn_lock:
-        workers = list(parent.worker_recs)
-    image_workers = [
-        worker for worker in workers
-        if str(worker.get("kind") or "").lower() == "image"
-        or str(worker.get("label") or "").lower().startswith("image")
-    ]
     revision_mode = bool((getattr(parent, "cfg", {}) or {}).get("_revision_mode"))
     if not revision_mode:
-        ready_workers = [
-            worker for worker in image_workers
-            if worker.get("clean") and str(
-                (worker.get("contract") or {}).get("status") or ""
-            ).lower() == "ready"
+        with parent._spawn_lock:
+            recs = list(parent.worker_recs)
+        # Only the EFFECTIVE ACTIVE attempt per base counts: a stale superseded
+        # ``ready`` must never mask the current active ``blocked`` attempt, and
+        # the result must not depend on list order.
+        image_workers = _effective_active_recs(recs, kind="image")
+        blocked_active = [
+            w for w in image_workers
+            if not (w.get("clean") and str(
+                (w.get("contract") or {}).get("status") or "").lower() == "ready")
         ]
+        ready_active = [w for w in image_workers if w not in blocked_active]
         # In-memory worker_recs freeze the clean flag at completion time.  A later
-        # correction (a re-run image-finalize, or a fixed handoff.json on disk)
-        # must still be able to clear this gate without hand-editing memory.  Fall
-        # back to the persisted handoff truth before blocking.
-        if not ready_workers and _disk_image_stage_ready(parent.ws):
-            ready_workers = ["<disk-handoff>"]
-        if not ready_workers:
+        # correction (a re-run image-finalize, or a repaired handoff.json) must be
+        # recoverable from the persisted handoff truth.  But a live active blocked
+        # attempt still blocks unless disk shows every image base clean+ready.
+        # A live active blocked Image attempt ALWAYS blocks Slide dispatch: an
+        # unrelated disk handoff (a different base) must never cross-heal it.
+        # Only a same-base higher-attempt handoff recovers it, and normal
+        # delegate_task has already reconciled disk truth into worker_recs before
+        # this gate, so a genuine same-base recovery is reflected in memory here.
+        if blocked_active:
+            labels = [str(w.get("label")) for w in blocked_active]
+            return (
+                "存在未完成的 active Image 分片(status!=ready)，"
+                f"不得启动 Slide: {labels[:8]}"
+            )
+        # No active blocked base, but also nothing ready in memory (e.g. memory has
+        # no Image record yet on a resumed run).  Fall back to persisted handoff
+        # truth: only clears when at least one image base finished and every active
+        # image base is clean+ready (real handoff, never ledger-only).
+        if not ready_active and not _disk_image_stage_ready(parent.ws):
             return (
                 "计划存在配图机会，但尚无完成且 status=ready 的 Image Agent；"
                 "禁止 Slide Agent 绕过素材阶段直接制作或自行生图。"
@@ -2518,31 +3240,54 @@ def _reserve_singleton_roles(parent, tasks):
     with parent._spawn_lock:
         for kind in requested:
             used = int(parent._role_spawn_count.get(kind, 0) or 0)
-            limit = MAX_REVIEW_ATTEMPTS if kind == "review" else 1
+            if kind == "review":
+                limit = MAX_REVIEW_ATTEMPTS
+            elif kind == "research":
+                limit = MAX_RESEARCH_ATTEMPTS
+            else:
+                limit = 1
             if used >= limit:
                 return (
                     f"{kind} 已达到受控执行上限 {limit}；停止继续重派，"
                     "保留现有问题账本并进入可交付收尾"
                 )
-            if kind == "review" and used:
-                reviews = [
-                    item for item in (getattr(parent, "worker_recs", []) or [])
-                    if str(item.get("kind") or "").lower() == "review"
-                    or str(item.get("label") or "").lower().startswith("review")
-                ]
-                latest = reviews[-1] if reviews else {}
+            if kind in {"review", "research"} and used:
+                peers = _effective_active_recs(
+                    getattr(parent, "worker_recs", []) or [], kind=kind)
+                latest = peers[-1] if peers else {}
                 latest_status = str((latest.get("contract") or {}).get("status") or "").lower()
-                if latest.get("clean") and latest_status == "ready":
+                # A succeeded prior attempt blocks a redundant second active instance.
+                if kind == "review" and latest.get("clean") and latest_status == "ready":
                     return "Review 已返回 ready；不得为审美偏好重复复验"
+                if kind == "research" and latest.get("clean") and latest_status in {"ready", "partial"}:
+                    return "Research 已完成；任务级单例不得重复委派"
+                # A repeat dispatch is a recovery, allowed ONLY after the prior
+                # attempt has a TERMINAL failed record (timeout/crash/blocked/
+                # clean=False).  No terminal record means the prior attempt is
+                # still in-flight — refuse, or we would run two concurrently.
+                terminal_failed = bool(peers) and not latest.get("clean")
+                if not terminal_failed:
+                    return (
+                        f"{kind} 仍在进行中(无 terminal 失败记录)；"
+                        "任务级单例不得并发第二个实例"
+                    )
         existing_owners = getattr(parent, "_slide_page_owners", {})
-        latest_slide_attempts = {}
-        for worker in getattr(parent, "worker_recs", []) or []:
-            worker_kind = str(worker.get("kind") or "").lower()
-            worker_label = str(worker.get("label") or "")
-            if worker_kind != "slide" and not worker_label.lower().startswith("slide"):
-                continue
-            base = re.sub(r"_r\d+$", "", worker_label)
-            latest_slide_attempts[base] = worker
+        all_recs = getattr(parent, "worker_recs", []) or []
+        # Deterministic effective-active slide attempt per base (order-independent).
+        latest_slide_attempts = {
+            _base_label(rec.get("label")): rec
+            for rec in _effective_active_recs(all_recs, kind="slide")
+        }
+
+        def _slide_repair_attempts(base_label):
+            # Sparse-safe: use the HIGHEST attempt allocated for this base, not the
+            # count of records (a missing intermediate _rN would under-count).
+            return max(
+                (int(r.get("attempt") or _attempt_of(r.get("label")))
+                 for r in all_recs if _base_label(r.get("label")) == base_label),
+                default=0,
+            )
+
         resumed = {}
         for page, label in slide_owners.items():
             if page in existing_owners:
@@ -2556,19 +3301,12 @@ def _reserve_singleton_roles(parent, tasks):
                     resumed[label] = str(previous.get("label") or label)
                     continue
                 if owner == label and previous and previous.get("clean"):
-                    reviews = [
-                        item for item in (getattr(parent, "worker_recs", []) or [])
-                        if str(item.get("kind") or "").lower() == "review"
-                        or str(item.get("label") or "").lower().startswith("review")
-                    ]
+                    reviews = _effective_active_recs(all_recs, kind="review")
                     latest_review = reviews[-1] if reviews else {}
                     review_status = str(
                         (latest_review.get("contract") or {}).get("status") or ""
                     ).lower()
-                    attempts = sum(
-                        1 for item in (getattr(parent, "worker_recs", []) or [])
-                        if re.sub(r"_r\d+$", "", str(item.get("label") or "")) == label
-                    )
+                    attempts = _slide_repair_attempts(label)
                     if (latest_review and review_status == "blocked"
                             and attempts <= MAX_SLIDE_REPAIR_ATTEMPTS):
                         resumed[label] = str(previous.get("label") or label)
@@ -2676,11 +3414,7 @@ def _blocking_review_failure(parent):
     else:
         with lock:
             records = list(getattr(parent, "worker_recs", []) or [])
-    reviews = [
-        record for record in records
-        if str(record.get("kind") or "").lower() == "review"
-        or "review" in str(record.get("label") or "").lower()
-    ]
+    reviews = _effective_active_recs(records, kind="review")
     if not reviews:
         return None
     review = reviews[-1]
@@ -2700,7 +3434,20 @@ def _blocking_review_failure(parent):
         or "Review 未通过最终质量门"
     ).strip()
     parent._review_recovery_notified = review_label
-    attempts = len(reviews)
+    # Budget by the highest allocated attempt / persistent role count, NOT by the
+    # collapsed active count (which is 1 per base).  A review_r2 whose base has
+    # already exhausted the budget must not be told to re-delegate.
+    review_base = _base_label(review_label)
+    max_attempt = max(
+        (int(r.get("attempt") or _attempt_of(r.get("label")))
+         for r in records
+         if _base_label(r.get("label")) == review_base
+         and (str(r.get("kind") or "").lower() == "review"
+              or str(r.get("label") or "").lower().startswith("review"))),
+        default=_attempt_of(review_label),
+    )
+    role_used = int((getattr(parent, "_role_spawn_count", {}) or {}).get("review", 0) or 0)
+    attempts = max(max_attempt, role_used)
     if attempts >= MAX_REVIEW_ATTEMPTS:
         instruction = (
             "Review 复验预算已用完。不要继续改页或探测环境；保留 _trace/review-issues.md，"
@@ -2814,7 +3561,7 @@ def _run_child(parent, task, ticket):
             ticket["recorded"] = True
     if transparency_error:
         contract["validation_error"] = transparency_error
-    return _child_handoff(parent, child, name, fin, contract)
+    return _child_handoff(parent, child, name, fin, contract, accept_fields=rec)
 
 
 def _record_worker_failure(parent, task, ticket, exit_reason, detail):
@@ -2855,6 +3602,7 @@ def _record_worker_failure(parent, task, ticket, exit_reason, detail):
         failure_dir, re.sub(r"[^A-Za-z0-9_.-]+", "_", label) + ".json"
     )
     temporary = failure_path + f".{os.getpid()}.{threading.get_ident()}.tmp"
+    _failure_ts = time.time()
     payload = {
         "label": label,
         "clean": False,
@@ -2862,6 +3610,12 @@ def _record_worker_failure(parent, task, ticket, exit_reason, detail):
         "contract": contract,
         "artifacts": [],
         "final_response": "",
+        # Self-describing fields for restart rebuild (mirror handoff payload).
+        "kind": kind,
+        "assigned_pages": assigned_pages,
+        "attempt": _attempt_of(label),
+        "base_label": re.sub(r"_r\d+$", "", label),
+        "ts": _failure_ts,
     }
     with open(temporary, "w", encoding="utf-8") as stream:
         json.dump(payload, stream, ensure_ascii=False, indent=2)
@@ -2869,6 +3623,18 @@ def _record_worker_failure(parent, task, ticket, exit_reason, detail):
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temporary, failure_path)
+    _append_worker_ledger(parent.ws, {
+        "ts": _failure_ts,
+        "label": label,
+        "base": re.sub(r"_r\d+$", "", label),
+        "kind": kind,
+        "attempt": _attempt_of(label),
+        "clean": False,
+        "contract_status": "blocked",
+        "assigned_pages": assigned_pages,
+        "handoff": "",
+        "abandoned": True,
+    })
     with parent._spawn_lock:
         if not ticket.get("recorded"):
             ticket["abandoned"] = True
@@ -2909,6 +3675,10 @@ def delegate_task(parent, goal=None, context=None, toolsets=None, role=None,
         return json.dumps({"error": "已到委派深度上限(叶子子 agent 不能再委派)"}, ensure_ascii=False)
 
     norm = [_normalize_task(t) for t in tasks]
+    # Fold durable disk truth into memory before the dispatch gates so a late
+    # completion / repaired handoff / interrupted attempt is seen, not just at
+    # the first run_job hydrate.
+    _reconcile_worker_recs(parent)
     norm, canonical_error = _canonicalize_slide_tasks(parent, norm)
     if canonical_error:
         return json.dumps({
@@ -2924,6 +3694,28 @@ def delegate_task(parent, goal=None, context=None, toolsets=None, role=None,
             "code": "grounding_required",
             "retry": "先写入并 read_file 验证 plan/grounded-knowledge.md，再重试原委派。",
         }, ensure_ascii=False)
+    # Deterministic plan image-contract gate: before ANY downstream production
+    # (image/slide/review), reject an illegal per-page presentation so the run
+    # fails here — not at the final deck.py build after the whole pipeline ran.
+    downstream_kinds = {
+        _task_kind(task.get("label"), task.get("goal")) for task in norm
+    }
+    if downstream_kinds & {"image", "slide", "review"}:
+        plan_contract_error = _plan_image_contract_error(parent.ws)
+        if plan_contract_error:
+            return json.dumps({
+                "error": plan_contract_error,
+                "code": "image_presentation_contract",
+                "retry": (
+                    "在每个 plan/slide_NN.md 的唯一 `## 视觉实现` 中使用同级独立行："
+                    "`- image_opportunity: real_required|generated_ok|none|chart_only|"
+                    "canvas_only|typography_only`；有位图时另写 "
+                    "`- presentation: subject-only|framed-scene|full-bleed|evidence-crop`，"
+                    "无位图时省略 presentation。full-bleed/framed-scene 不是 "
+                    "image_opportunity，split-media/right-half/cards 也不是 presentation。"
+                    "直接修正计划后重试；不要搜索或修改 Skill/Harness 运行时代码。"
+                ),
+            }, ensure_ascii=False)
     image_error = _image_before_slide_error(parent, norm)
     if image_error:
         return json.dumps({

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sn-ppt-web 专属 Harness 的叶子工具与工具 schema。
+"""Long-Horizon Presenter 专属 Harness 的叶子工具与工具 schema。
 
 ⚠️ 本文件的工具 **schema 严格对齐 hermes-agent**(tools/*.py):工具名称、描述、parameters
 逐字照搬 hermes 的 `{name, description, parameters}`(OpenAI 风格 parameters,**不是** Anthropic
@@ -536,12 +536,20 @@ def _slide_vision_freshness_error(agent, fp):
     state = (digest, png_mtime, source_mtime)
     previous = observations.get(key)
     if previous and previous.get("state") != state and previous.get("state", (None,))[0] == digest:
+        previous_state = previous.get("state") or ()
+        previous_source_mtime = previous_state[2] if len(previous_state) > 2 else None
         observations[key] = {"state": state, "count": 1}
-        return (
-            f"vision_analyze 检测到无效修复：renders/slide_{page}.png 虽已重新生成，"
-            "但像素字节与该 Agent 上次查看的版本完全相同。当前修改没有改变页面；"
-            "请回到重叠对象的坐标、尺寸或结构根因，不要继续复看相同像素。"
-        )
+        if previous_source_mtime != source_mtime:
+            return (
+                f"vision_analyze 检测到无效修复：renders/slide_{page}.png 虽已重新生成，"
+                "但像素字节与该 Agent 上次查看的版本完全相同。当前源文件修改没有改变页面；"
+                "请回到重叠对象的坐标、尺寸或结构根因，不要继续复看相同像素。"
+            )
+        # ``render.py --batch`` may intentionally rebuild an unchanged page as
+        # part of final verification.  When neither slide HTML nor base.css has
+        # changed, identical bytes are an idempotent render rather than a failed
+        # repair.  Let Vision certify the new file mtime so final-pixel evidence
+        # can close cleanly instead of forcing the Agent into a fake CSS edit.
     count = int(previous.get("count", 0)) + 1 if previous and previous.get("state") == state else 1
     observations[key] = {"state": state, "count": count}
     if count > 2:

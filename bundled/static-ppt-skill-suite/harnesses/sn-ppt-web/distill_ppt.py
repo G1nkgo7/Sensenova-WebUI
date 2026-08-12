@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""PPT agentic 推理入口 —— 单条 / 批量并行 rollout,生成 SFT 用的原始轨迹。
+"""PPT agentic 蒸馏入口 —— 单条 / 批量并行 rollout,生成 SFT 用的原始轨迹。
 
-一个文件管全部推理:CLI(单条 + batch)+ 调度(并行子进程 + manifest 断点续跑)+ PPT recipe
+一个文件管全部蒸馏:CLI(单条 + batch)+ 调度(并行子进程 + manifest 断点续跑)+ PPT recipe
 (seed→brief、编排器装配、拒绝采样验收)。通用 agent 运行时在 core/(agent/tools/trace),
 本文件是它唯一认识 "PPT" 的薄外壳——换领域只改本文件 + skills/。
 
-teacher 模型(Claude Opus)按 skills/sn-ppt-web 自主生成整套 HTML 幻灯片,轨迹经**拒绝采样**
+teacher 模型(Claude Opus)按 skills/sn-ppt-web-zh 自主生成整套 HTML 幻灯片,轨迹经**拒绝采样**
 落库:编排器负责规划、按设计亲缘页组委派并运行确定性收口脚本(不许写 slides/),并行 Slide Group 写/渲/自纠自己的页面。
 
 每条 seed = 一个 sample,跑在**独立子进程 + 独立 run 目录**里,进程级全局/playwright/cwd 永不串台:
@@ -276,9 +276,20 @@ def _snapshot_skill(run_dir, skill_name=None):
     return skills_root
 
 
+# Release decks snapshot the bilingual public Skill names. Continue/revision
+# must also resolve the historical unsuffixed alias and local-demo canonical
+# names so an existing workspace remains editable after packaging.
+_LEGACY_SKILL_NAMES = (
+    "sn-ppt-web",
+    "long-horizon-presenter",
+    "long-horizon-presenter-en",
+)
+_KNOWN_SKILL_NAMES = (*SKILL_BY_LANGUAGE.values(), *_LEGACY_SKILL_NAMES)
+
+
 def _workspace_skills_root(ws):
     root = os.path.join(ws, "skills")
-    for skill_name in (*SKILL_BY_LANGUAGE.values(), "sn-ppt-web"):
+    for skill_name in _KNOWN_SKILL_NAMES:
         if os.path.isfile(os.path.join(root, skill_name, "SKILL.md")):
             return root
     return SKILLS_DIR
@@ -289,12 +300,12 @@ def _workspace_skill_name(ws):
     try:
         with open(manifest_path, "r", encoding="utf-8") as stream:
             selected = str(json.load(stream).get("skill") or "")
-        if selected in {*SKILL_BY_LANGUAGE.values(), "sn-ppt-web"}:
+        if selected in set(_KNOWN_SKILL_NAMES):
             return selected
     except (OSError, ValueError, TypeError):
         pass
     root = _workspace_skills_root(ws)
-    for skill_name in (*SKILL_BY_LANGUAGE.values(), "sn-ppt-web"):
+    for skill_name in _KNOWN_SKILL_NAMES:
         if os.path.isfile(os.path.join(root, skill_name, "SKILL.md")):
             return skill_name
     return SKILL_BY_LANGUAGE["zh"]
@@ -631,22 +642,18 @@ def _disk_material_worker_ready(ws, base_label):
 
     Mirrors the Image→Slide gate fallback: a stale in-memory ``clean`` flag must
     not block a material stage that was genuinely completed (a re-run or a
-    corrected handoff on disk).  Accept the base label or any ``_rN`` retry whose
-    durable handoff reports clean + ready + complete coverage.
+    corrected handoff on disk).  Uses the shared, attempt-aware worker state so
+    only the *active* attempt for this base (not a superseded/failed one) whose
+    handoff reports clean + ready + complete coverage counts.
     """
-    pattern = os.path.join(ws, "_trace", "subagents", "*", "handoff.json")
-    for path in glob.glob(pattern):
-        label = os.path.basename(os.path.dirname(path))
-        if re.sub(r"_r\d+$", "", str(label)) != base_label:
+    from core.agent import _active_workers_from_disk
+
+    for rec in _active_workers_from_disk(ws, "material", clean_source_only=True):
+        if re.sub(r"_r\d+$", "", str(rec.get("label") or "")) != base_label:
             continue
-        try:
-            with open(path, encoding="utf-8") as stream:
-                payload = json.load(stream)
-        except (OSError, ValueError, TypeError):
-            continue
-        contract = payload.get("contract") or {}
+        contract = rec.get("contract") or {}
         coverage = str(contract.get("coverage") or "").strip().lower()
-        if (bool(payload.get("clean"))
+        if (bool(rec.get("clean"))
                 and str(contract.get("status") or "").lower() == "ready"
                 and coverage.startswith("complete")):
             return True
@@ -662,13 +669,13 @@ def _material_acceptance(ws, worker_recs):
     lossless stage directly; do not reject a fully covered attachment merely
     because there is no separate Material worker record.
     """
-    latest_material = {}
-    for worker in worker_recs:
-        base = re.sub(r"_r\d+$", "", str(worker.get("label") or ""))
-        if base.startswith("material"):
-            latest_material[base] = worker
+    from core.agent import _effective_active_recs
+
+    material_active = _effective_active_recs(worker_recs, kind="material")
     bad_contracts = []
-    for label, worker in latest_material.items():
+    for worker in material_active:
+        label = str(worker.get("label") or "")
+        base = re.sub(r"_r\d+$", "", label)
         contract = worker.get("contract") or {}
         coverage = str(contract.get("coverage") or "").strip().lower()
         if (not worker.get("clean") or contract.get("status") != "ready"
@@ -677,7 +684,7 @@ def _material_acceptance(ws, worker_recs):
             # re-run persists to handoff.json.  Consult that durable truth before
             # rejecting, so a genuinely complete material stage is not blocked by
             # a stale in-memory record.
-            if not _disk_material_worker_ready(ws, label):
+            if not _disk_material_worker_ready(ws, base):
                 bad_contracts.append(label)
     if bad_contracts:
         return False, f"Material 未返回 ready/complete: {bad_contracts[:5]}"
@@ -758,17 +765,23 @@ def _material_acceptance(ws, worker_recs):
 
 
 def _research_acceptance(ws, worker_recs):
-    """Accept Research by its durable brief; treat contract fields as diagnostics."""
-    workers = [
-        worker for worker in worker_recs
-        if str(worker.get("kind") or "").lower() == "research"
-        or str(worker.get("label") or "").lower().startswith("research")
-    ]
-    if not workers:
+    """Accept Research by its durable brief; treat contract fields as diagnostics.
+
+    Research is a task-level singleton: after collapsing each base label to its
+    effective active attempt, there must be exactly ONE active Research base.
+    More than one active base is an ambiguity no matter the success/failure mix —
+    we never "pick a successful one".  The single active attempt is then validated
+    against the formal artifact / canonical grounding handoff.
+    """
+    from core.agent import _effective_active_recs
+
+    active = _effective_active_recs(worker_recs, kind="research")
+    if not active:
         return True, "ok"
-    if len(workers) != 1:
-        return False, f"Research 必须是任务级单例，实际记录 {len(workers)} 个"
-    worker = workers[0]
+    if len(active) > 1:
+        bases = sorted({re.sub(r"_r\d+$", "", str(w.get("label") or "")) for w in active})
+        return False, f"Research 存在多个 active 实例(歧义，任务级单例): {bases[:4]}"
+    worker = active[0]
     contract = worker.get("contract") or {}
     status = str(contract.get("status") or "").strip().lower()
     declared = str(contract.get("output") or "").strip()
@@ -818,14 +831,14 @@ _ASSET_ID_RE = re.compile(
 _IMAGE_OPPORTUNITY_RE = re.compile(
     r"(?im)^\s*[-*+]?\s*(?:\*\*)?image_opportunity(?:\*\*)?\s*[:：]\s*(.+?)\s*$"
 )
-_NO_BITMAP_VALUES = {
-    "none", "no", "code", "code_only", "code-only", "canvas",
-    "canvas_only", "canvas-only", "chart", "chart_only", "chart-only",
-    "typography", "typography_only", "typography-only",
-}
 
 
 def _planned_asset_ids(ws):
+    # Reuse the harness's single source of truth for the no-bitmap decision so
+    # the startup dispatch gate and this final acceptance never diverge (a page
+    # marked ``none`` or the CJK ``无位图`` must read the same on both sides).
+    from core.agent import _image_opportunity_needs_bitmap
+
     ids, needs_image = set(), False
     for plan in glob.glob(os.path.join(ws, "plan", "slide_*.md")):
         try:
@@ -834,11 +847,8 @@ def _planned_asset_ids(ws):
             continue
         ids.update(_ASSET_ID_RE.findall(text))
         opportunity = _IMAGE_OPPORTUNITY_RE.search(text)
-        if opportunity:
-            value = opportunity.group(1).strip().lower()
-            head = re.split(r"[\s,，;；(/]", value, maxsplit=1)[0]
-            if head not in _NO_BITMAP_VALUES:
-                needs_image = True
+        if opportunity and _image_opportunity_needs_bitmap(opportunity.group(1)):
+            needs_image = True
     return ids, needs_image
 
 
@@ -879,28 +889,26 @@ def _image_acceptance(ws, worker_recs, *, allow_existing_assets=False):
     asset still resolves.  When a revision does dispatch Image, that worker is
     still required to finish cleanly.
     """
-    workers = [
-        worker for worker in worker_recs
-        if str(worker.get("kind") or "").lower() == "image"
-        or str(worker.get("label") or "").lower().startswith("image")
-    ]
+    from core.agent import _effective_active_recs
+
+    workers = _effective_active_recs(worker_recs, kind="image")
     asset_ids, needs_image = _planned_asset_ids(ws)
     if (asset_ids or needs_image) and not workers and not allow_existing_assets:
         return False, "逐页计划需要 Image，但没有任何 Image worker record"
-    ready_workers = [
+    # EVERY effective-active Image shard must be clean+ready.  A single active
+    # blocked base must reject even when another base is ready (multiple legit
+    # Image shards); "some ready exists" is not sufficient.
+    blocked_active = [
         worker for worker in workers
-        if worker.get("clean") and str(
-            (worker.get("contract") or {}).get("status") or ""
-        ).lower() == "ready"
+        if not (worker.get("clean") and str(
+            (worker.get("contract") or {}).get("status") or "").lower() == "ready")
     ]
-    # A failed attempt superseded by a clean retry is diagnostic history, not
-    # a reason to reject a complete canonical catalog.
-    if workers and not ready_workers:
+    if blocked_active:
         attempts = [
             f"{worker.get('label')}:{str((worker.get('contract') or {}).get('status') or 'missing').lower()}"
-            for worker in workers
+            for worker in blocked_active
         ]
-        return False, f"Image 阶段没有成功完成的 worker: {attempts[:8]}"
+        return False, f"Image 阶段有未完成的 active 分片: {attempts[:8]}"
     if needs_image and not asset_ids:
         return False, "计划声明需要图片，但未分配稳定 asset_id"
     if not asset_ids:
@@ -913,21 +921,30 @@ def _image_acceptance(ws, worker_recs, *, allow_existing_assets=False):
         entries = payload.get("assets") or []
     except (OSError, ValueError, TypeError, AttributeError) as exc:
         return False, f"assets/catalog.json 无法读取: {type(exc).__name__}"
-    by_id = {
-        str(item.get("asset_id")): item for item in entries
-        if isinstance(item, dict) and item.get("asset_id")
-    }
-    missing, unresolved = [], []
+    # Shared active-aware, order-independent resolution: a rejected/superseded
+    # historical entry with the same asset_id must not shadow the active ready
+    # one, and duplicate active entries are an explicit ambiguity (matches the
+    # agent-side dispatch gate _catalog_asset_error).
+    from core.agent import _catalog_active_by_id
+
+    resolved = _catalog_active_by_id(entries)
+    missing, unresolved, ambiguous = [], [], []
     for asset_id in sorted(asset_ids):
-        entry = by_id.get(asset_id)
-        if not entry:
+        entry, state = resolved.get(asset_id, (None, "missing"))
+        if state == "ambiguous":
+            ambiguous.append(asset_id)
+            continue
+        if entry is None:
             missing.append(asset_id)
             continue
         path = _workspace_file(ws, entry.get("path"))
         if entry.get("status") != "ready" or not path or not os.path.isfile(path):
             unresolved.append(asset_id)
-    if missing or unresolved:
-        return False, f"图片资产未解析: missing={missing[:8]} not_ready={unresolved[:8]}"
+    if missing or unresolved or ambiguous:
+        return False, (
+            f"图片资产未解析: missing={missing[:8]} not_ready={unresolved[:8]} "
+            f"ambiguous={ambiguous[:8]}"
+        )
     return True, "ok"
 
 
@@ -971,17 +988,13 @@ def _slide_assignment_acceptance(ws, worker_recs, *, allow_partial=False):
     if expected and expected != set(range(1, max(expected) + 1)):
         return False, f"逐页计划页码不连续: actual={sorted(expected)[:30]}"
     # A failed Production Group may be continued by its exact same canonical
-    # owner.  Keep every attempt in result.json for audit, but use only the
-    # latest effective attempt for ownership and pixel acceptance.
-    latest_workers = {}
-    for worker in worker_recs:
-        kind = str(worker.get("kind") or "").lower()
-        label = str(worker.get("label") or "")
-        if kind != "slide" and not label.lower().startswith("slide"):
-            continue
-        latest_workers[re.sub(r"_r\d+$", "", label)] = worker
+    # owner.  Use the shared deterministic effective-active selection (highest
+    # attempt/ts/label per base) so ownership does not depend on input order.
+    from core.agent import _effective_active_recs
+
+    latest_slides = _effective_active_recs(worker_recs, kind="slide")
     owners = {}
-    for worker in latest_workers.values():
+    for worker in latest_slides:
         label = str(worker.get("label") or "")
         pages = [int(page) for page in worker.get("assigned_pages") or []]
         if not pages:
@@ -1009,7 +1022,7 @@ def _slide_assignment_acceptance(ws, worker_recs, *, allow_partial=False):
             frozenset(pages): group_id
             for group_id, pages in planned_groups.items()
         }
-        for worker in latest_workers.values():
+        for worker in latest_slides:
             label = str(worker.get("label") or "")
             page_set = frozenset(int(page) for page in worker.get("assigned_pages") or [])
             if page_set not in expected_sets:
@@ -1021,11 +1034,10 @@ def _slide_assignment_acceptance(ws, worker_recs, *, allow_partial=False):
 
 
 def _attachment_review_acceptance(ws, worker_recs):
-    latest = None
-    for worker in worker_recs:
-        label = re.sub(r"_r\d+$", "", str(worker.get("label") or "")).lower()
-        if "review" in label:
-            latest = worker
+    from core.agent import _effective_active_recs
+
+    reviews = _effective_active_recs(worker_recs, kind="review")
+    latest = reviews[-1] if reviews else None
     if latest is None:
         return False, "附件任务没有执行最终 Review"
     contract = latest.get("contract") or {}
@@ -1274,12 +1286,9 @@ def _pixel_review_acceptance(
     worker_recs, *, ws=None, allow_review_only=False, require_content_fidelity=False
 ):
     """Validate the latest bounded Review attempt and its pixel evidence."""
-    latest = {}
-    for worker in worker_recs:
-        base = re.sub(r"_r\d+$", "", str(worker.get("label") or "")).lower()
-        latest[base] = worker
+    from core.agent import _effective_active_recs
 
-    slide_workers = [worker for label, worker in latest.items() if label.startswith("slide")]
+    slide_workers = _effective_active_recs(worker_recs, kind="slide")
     if not slide_workers and not allow_review_only:
         return False, "没有可验收的 Slide 子 Agent"
     failed_slides = [worker for worker in slide_workers if not worker.get("clean")]
@@ -1334,13 +1343,11 @@ def _pixel_review_acceptance(
         if stale:
             return False, f"Slide 子 Agent 未完成且交付物缺失或过期: {stale[:8]}"
 
-    reviews = [
-        worker for worker in worker_recs
-        if str(worker.get("kind") or "").lower() == "review"
-        or "review" in str(worker.get("label") or "").lower()
-    ]
+    reviews = _effective_active_recs(worker_recs, kind="review")
     if not reviews:
         return False, "没有执行最终 Review"
+    # Deterministic: the single latest active review base (recs are ts/attempt/
+    # label ordered by the shared selector).
     review = reviews[-1]
     if ws:
         review = _review_with_persisted_evidence(ws, review)
@@ -1443,6 +1450,19 @@ def _accept(
     delivery_ok, delivery_reason = _delivery_audit(orch.ws, len(slides))
     if not delivery_ok:
         return False, delivery_reason
+    # Reconcile durable disk truth (late completions, repaired/interrupted
+    # attempts) into memory before final acceptance snapshots the records, so the
+    # research/slide/pixel consumers do not judge on a stale dirty timeout rec.
+    # A failure here must NOT be swallowed — silently accepting on stale memory
+    # could pass a deck whose durable state says otherwise.
+    from core.agent import _reconcile_worker_recs
+    try:
+        _reconcile_worker_recs(orch)
+    except Exception as exc:
+        return False, (
+            "持久 worker 状态 reconcile 失败，拒绝在陈旧内存上收尾: "
+            f"{type(exc).__name__}: {exc}"
+        )
     with orch._spawn_lock:                      # 与子 agent 线程的写竞争,快照后再判
         recs = list(orch.worker_recs)
     research_workers = [
@@ -1621,6 +1641,12 @@ def run_sample(sample_id, seed, run_dir, config):
                  skills_root=workspace_skills,
                  forbid_write_prefixes=["slides"])   # 红线:编排器不许写 slides/ 页面 HTML
     orch.child_system = SUBAGENT_SYSTEM_EN if orch.prompt_language == "en" else SUBAGENT_SYSTEM
+    # Restart recovery: if a prior process left durable worker state in _trace,
+    # rebuild worker_recs / spawn counts / page ownership before running so the
+    # dispatch gates and acceptance see completed/superseded attempts (no-op on a
+    # fresh run or when the in-memory list is already populated).
+    from core.agent import _hydrate_orchestrator_state
+    _hydrate_orchestrator_state(orch)
     orch.run()
     ok, reason = _accept(
         orch,
@@ -1925,7 +1951,7 @@ class Progress:
                                        TimeElapsedColumn, TimeRemainingColumn)
             self._console = Console()
             self._rich = RP(
-                SpinnerColumn(), TextColumn("[bold cyan]推理中[/]"), BarColumn(bar_width=None),
+                SpinnerColumn(), TextColumn("[bold cyan]蒸馏中[/]"), BarColumn(bar_width=None),
                 MofNCompleteColumn(),
                 TextColumn("[green]✓{task.fields[ok]}[/] [yellow]⊘{task.fields[rej]}[/] [red]✗{task.fields[err]}[/]"),
                 TextColumn("·"), TimeElapsedColumn(), TextColumn("剩余"), TimeRemainingColumn(),
@@ -1986,7 +2012,7 @@ def _archive_failed(run_dir, batch, prev):
 
 def main():
     load_dotenv()
-    ap = argparse.ArgumentParser(description="PPT agentic 推理 —— 单条 / 批量并行 rollout。")
+    ap = argparse.ArgumentParser(description="PPT agentic 蒸馏 —— 单条 / 批量并行 rollout。")
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--query", help="单条:直接传一个 brief 跑一条")
     g.add_argument("--input", help="批量:seed jsonl 文件(每行一个 {query, lang?, slide_count?, ...})")

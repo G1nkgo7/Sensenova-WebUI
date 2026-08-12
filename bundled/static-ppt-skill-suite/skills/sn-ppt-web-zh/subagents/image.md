@@ -106,7 +106,12 @@ assets:
     treatment: none | cutout | <CSS 调和建议>
     crop_contract: fit=<cover|contain|cutout>; focal=<位置>; protect=<主体部位/图内信息>; allowed=<可裁背景>; object_position=<x% y%>
 missing: none | <asset_id + 原因 + 降级建议>
-transparent_assets: assets/<name>-cutout.png, assets/<name>-cutout.png | not-required
 ```
 
-一个分片只有全部计划 `asset_id` 均在 `assets/catalog.json` 中达到 `ready`、实际路径存在时才能返回 `status: ready`；否则返回 `blocked` 并逐项列出缺口，不用 `partial` 掩盖未完成素材。候选、被替换文件和 `needs_review` 不得计入已准备素材。只要 goal 中任一素材要求 `subject_only: true`、透明背景、主体透明或抠图，`status: ready` 就必须给出 `transparent_assets`，且其中只列已经通过 Alpha 检查与 Vision 的最终派生文件。
+> **仅透明任务才输出 `transparent_assets`。** 上面的返回合同**不含** `transparent_assets` 字段。只有当 goal 真实要求 `subject_only: true` / `presentation: subject-only` / 透明背景 / 主体透明 / 抠图 / 去背时，才在合同末尾**追加一行**：
+> ```text
+> transparent_assets: assets/<name>-cutout.png[, assets/<name>-cutout.png ...]
+> ```
+> 且其中只列已通过 Alpha 检查与 Vision 的最终派生 cutout。非透明任务**完全不输出这个 key**——不写 `transparent_assets: not-required`，不留占位。
+
+一个分片只有全部计划 `asset_id` 均在 `assets/catalog.json` 中达到 `ready`、实际路径存在时才能返回 `status: ready`；否则返回 `blocked` 并逐项列出缺口，不用 `partial` 掩盖未完成素材。候选、被替换文件和 `needs_review` 不得计入已准备素材。

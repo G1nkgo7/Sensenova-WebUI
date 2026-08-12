@@ -127,6 +127,52 @@ PAGE_RE = re.compile(r"^slide_(\d+)\.png$")
 _PICTOGRAPH_RE = re.compile(r"[\u2600-\u27bf\U0001f000-\U0001faff]")
 _IMAGE_PRESENTATIONS = {"subject-only", "framed-scene", "full-bleed", "evidence-crop"}
 
+# The no-bitmap machine-enum decision, kept identical to the startup dispatch
+# gate so a page's bitmap need reads the same at plan time and at build time
+# (a page that declares no-bitmap must never be judged a raster page).
+_NO_BITMAP_VALUES = {
+    "none", "no", "code", "code_only", "code-only", "canvas",
+    "canvas_only", "canvas-only", "chart", "chart_only", "chart-only",
+    "typography", "typography_only", "typography-only",
+}
+_NO_BITMAP_CJK_RE = re.compile(
+    r"^(?:无|none|无需|不需|不用)?"
+    r"(?:位图|配图|图片|图像|插图|图)?"
+    r"(?:需求|机会)?$"
+)
+_NO_BITMAP_CJK_VALUES = {
+    "无", "无位图", "无需配图", "不需配图", "无需图片", "无需图像",
+    "无需插图", "无图", "无需位图", "不需要配图", "不需要图片", "无配图",
+    "无位图需求", "无配图需求",
+}
+_IMAGE_OPPORTUNITY_RE = re.compile(
+    r"(?im)^\s*[-*+]?\s*(?:\*\*)?image_opportunity(?:\*\*)?\s*[:：]\s*(.+?)\s*$"
+)
+
+
+def _normalize_image_opportunity(raw_value: str) -> str:
+    value = str(raw_value or "").strip().lower()
+    match = re.match(r"([a-z][a-z0-9_-]*)", value)
+    if match:
+        return match.group(1)
+    return re.split(r"[\s,，;；(/（]", value, maxsplit=1)[0]
+
+
+def _image_opportunity_needs_bitmap(raw_value: str) -> bool:
+    """Machine-enum truth: a page needs a bitmap unless its declared opportunity
+    is a no-bitmap enum (``none``, ``chart_only`` …) or a CJK equivalent."""
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return False
+    if _normalize_image_opportunity(raw) in _NO_BITMAP_VALUES:
+        return False
+    cjk_head = re.split(r"[\s,，;；:：(/（]", raw, maxsplit=1)[0].strip()
+    if cjk_head in _NO_BITMAP_CJK_VALUES:
+        return False
+    if _NO_BITMAP_CJK_RE.fullmatch(cjk_head) and re.search(r"[无不]", cjk_head):
+        return False
+    return True
+
 
 def _normalize_heading(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip().lower()).rstrip(":：")
@@ -213,14 +259,30 @@ def _validate_image_presentations(root: Path, expected: int | None) -> None:
     """Require one explicit rendering contract for every planned raster page."""
     errors = []
     for _, path in _plan_files(root, expected):
-        visual = _first_section(_sections(path.read_text(encoding="utf-8")), VISUAL_HEADINGS)
-        raster_medium = re.search(
-            r"(?im)^\s*[-*+]\s*medium\s*[:：].*(?:photo|photograph|generated[ -]?image|bitmap|raster|生成图|位图|照片)",
-            visual,
+        text = path.read_text(encoding="utf-8")
+        visual = _first_section(_sections(text), VISUAL_HEADINGS)
+        # Machine-enum first: a page that declares no-bitmap (none / chart_only /
+        # canvas_only / typography_only / CJK 无位图) is NOT a raster page.  This
+        # must win over a medium-string regex, which would false-positive on the
+        # substring 位图 inside 无位图.
+        opportunity = _IMAGE_OPPORTUNITY_RE.search(text)
+        declares_bitmap = _image_opportunity_needs_bitmap(
+            opportunity.group(1) if opportunity else ""
         )
-        raster_path = re.search(r"(?i)assets/[A-Za-z0-9_./-]+\.(?:png|jpe?g|webp|gif)", visual)
-        if not raster_medium and not raster_path:
-            continue
+        raster_path = re.search(
+            r"(?i)assets/[A-Za-z0-9_./-]+\.(?:png|jpe?g|webp|gif)", visual)
+        if opportunity is not None:
+            if not declares_bitmap and not raster_path:
+                continue
+        else:
+            raster_medium = re.search(
+                r"(?im)^\s*[-*+]\s*medium\s*[:：]"
+                r".*(?:photo|photograph|generated[ -]?image|bitmap|raster|生成图|照片"
+                r"|(?<![无不])位图)",
+                visual,
+            )
+            if not raster_medium and not raster_path:
+                continue
         match = re.search(
             r"(?im)^\s*[-*+]\s*presentation\s*[:：]\s*`?([A-Za-z-]+)", visual
         )

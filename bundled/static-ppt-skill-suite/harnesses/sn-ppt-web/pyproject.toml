@@ -1,7 +1,7 @@
 [project]
 name = "ppt-distillation-v2"
 version = "0.1.0"
-description = "PPT agentic SFT 数据推理 V2 —— 薄 harness(core/)+ PPT 入口(distill_ppt.py)"
+description = "PPT agentic SFT 数据蒸馏 V2 —— 薄 harness(core/)+ PPT 入口(distill_ppt.py)"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=0.40",

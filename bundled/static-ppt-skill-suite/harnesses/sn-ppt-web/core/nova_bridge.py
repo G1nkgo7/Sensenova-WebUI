@@ -1,4 +1,4 @@
-"""Optional Nova exact-raw transport for the sn-ppt-web harness.
+"""Optional Nova exact-raw transport for the Long-Horizon Presenter harness.
 
 The Presenter Skill and role workflow remain unchanged.  This module only
 replaces the two model transports required by the Nova V2 brushing contract:

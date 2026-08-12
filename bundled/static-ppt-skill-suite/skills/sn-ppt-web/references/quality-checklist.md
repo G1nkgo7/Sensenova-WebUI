@@ -158,7 +158,7 @@
 - [ ] **中文字体语义(cjk-typography)**:同一句标题、结论、按钮或标签优先使用一个字体家族，强调词优先只改颜色/字重/字号/装饰线；卡通、手写、书法体只在合题场景且显式标记时使用；所有中文字体栈保留 Noto Sans/Serif SC 兜底。`render.py` 的 `cjkTypography` 是 advisory 线索，不要求机械清零；只有新鲜像素或 DOM 证明缺字、不可读、真实裁切/遮挡或语义角色明显错误时才阻止交付。
 - [ ] **对比度 gate(contrast-gate)**:正文对底 **≥4.5:1**、大字(>18px 或 14px 粗)**≥3:1**(可从 `base.css` 解析出的 token 色值算 WCAG 比,或在渲染图上取色比对)。不达标就把 text 用途换深一档(600 级)。
 - [ ] **每张 slide 有明确明度角色 + 明暗节奏(slide-theme / slide-rhythm)**:每页归位到「常规内容底 / 加深过渡底 / 满铺 hero」等已声明状态之一，体例全套统一。节奏变化服务章节和叙事高点，不为了打破连续次数随机换底；发现长段页面视觉状态没有变化且阅读疲劳时，再用同色系明度、图片或色场状态建立转折。
-- [ ] **骨架契约(layout-contract)**:`render.py ⚠ CUSTOM-BODY` / `⚠ ABS-LAYOUT` 必须为零;root 直下只用标准 `.slide-title` / `.slide-body` / `.slide-footer`,正文内容不得用 absolute/fixed 拼版。
+- [ ] **骨架契约(layout-contract)**:root 直下只用标准 `.slide-title` / `.slide-body` / `.slide-footer`,正文内容尽量回到 `.slide-body` 的网格/flow。`render.py ⚠ CUSTOM-BODY` / `⚠ ABS-LAYOUT` 是**诊断告警(advisory)**、不是硬门:只有当新鲜像素确认它**真的**造成裁切、遮盖、下方溢出或不可读时才作为硬伤返修;若像素上构图完好(装饰/scrim 的绝对定位、或不影响阅读的自定义正文结构),记为 checker mismatch 保留,不为清零告警而破坏结构。真正的硬门只有 `broken` / `overflow` 与真实遮盖。
 - [ ] **遮盖护栏(layout-guard)**:`DECOR-OVERLAP` / `FOOTER-COVER` 候选已逐项对照新鲜像素；真实遮盖为零。没有可见遮盖的 bbox 误报记录为 checker mismatch，不为了清零报告破坏构图。
 - [ ] **概念图媒介(diagram-medium)**:大型流程 / 架构 / 机制图使用 Canvas 几何 + HTML 标签，或无文字图片 + HTML 标注；SVG 仅用于 icon/logo/箭头/小装饰。旧页面若保留大型 SVG，以最终像素确认标签、方向和主体真实可读，不按告警数量验收。
 - [ ] **文本框溢出 / 卡内空洞(box-fit,见 §9⑩⑰)**:`render.py ⚠ TEXT-OVERFLOW-BOX`(文字撑出 panel/卡片/正文区)/ `⚠ INNER-GAP`(卡中间空一大块)必须为零;等分网格(`repeat(N,1fr)`)承载不等量文本改 `auto`+顶排、去掉不必要的 `margin-top:auto`、多区堆叠页不写死 `height:XXXpx`、封面巨字号用 `clamp()`/按字数降档不顶出安全区。

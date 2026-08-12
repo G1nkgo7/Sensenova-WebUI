@@ -91,7 +91,12 @@ assets:
     treatment: none | cutout | <CSS harmonization guidance>
     crop_contract: fit=<cover|contain|cutout>; focal=<position>; protect=<parts>; allowed=<background>; object_position=<x% y%>
 missing: none | <asset_id + reason + fallback>
-transparent_assets: assets/<name>-cutout.png | not-required
 ```
 
-Summarize completed assets and real gaps naturally; do not use a fixed status enum to control the parent workflow. Candidates, superseded files, and unresolved review items are not prepared assets. Every missing item needs one plan-ready replacement medium so the Orchestrator can update affected pages and continue without redelegating the same Image task. Declare the whole task unable to continue only when the missing content makes the user's core goal impossible. List only alpha- and Vision-verified files under `transparent_assets`.
+> **Emit `transparent_assets` only for a genuine transparency task.** The contract above does **not** include a `transparent_assets` field. Only when the goal truly requires `subject_only: true` / `presentation: subject-only` / transparent background / transparent subject / cut-out (抠图/去背) do you **append one line** at the end:
+> ```text
+> transparent_assets: assets/<name>-cutout.png[, assets/<name>-cutout.png ...]
+> ```
+> listing only alpha- and Vision-verified final cutouts. A non-transparent task **omits the key entirely** — never write `transparent_assets: not-required` and never leave a placeholder.
+
+Summarize completed assets and real gaps naturally; do not use a fixed status enum to control the parent workflow. Candidates, superseded files, and unresolved review items are not prepared assets. Every missing item needs one plan-ready replacement medium so the Orchestrator can update affected pages and continue without redelegating the same Image task. Declare the whole task unable to continue only when the missing content makes the user's core goal impossible.

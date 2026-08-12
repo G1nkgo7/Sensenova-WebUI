@@ -12,7 +12,7 @@
 
 PPT 页面和讲稿都是**给观众看/听的成品**，只放观众需要的信息。以下三条是硬红线，写 HTML 时逐条自检：
 
-1. **来源/出处不上屏**：`来源：…`、`出处`、`Source:`、`数据来源`、参考文献等只写进 `speech.md`（讲稿），**绝不出现在幻灯片 HTML**。唯一例外是计划明确声明的独立 references 页。不要为了"严谨"在每页页脚挂一条 source。
+1. **机械来源脚注不上屏**：不要为了"严谨"在每页页脚/角落挂 `来源：…`、`出处`、`Source:`、`数据来源` 之类的溯源脚注；事实溯源写进 `speech.md`（讲稿）。**可以上屏**的是面向观众的正常内容：名人名言的**简短署名**（如「— 鲁迅」）、人物页的姓名/头衔、以及计划明确声明的**独立 references 页**上的标准引文。区别在于：内容性的引文/署名服务观众，机械的溯源脚注是给作者自查的。
 2. **内部隐藏状态绝不上屏**：文件路径（如 `research/research.md`、`plan/…`）、章节锚点（`§二.3`）、证据 ID、production group、assumption、制作状态、伪档案号——这些是内部生产信息，**一个字都不能进 HTML**。把 `research/research.md §二.4` 当"来源"印到页面上是严重违规。
 3. **首页/结尾页/过渡页不强加正文页家具**：封面（`.slide--cover`）、结尾（`.slide--cover.slide--closing`）、过渡/章节页**默认不放** `.slide-footer`、`.page-no` 页码、`border-top` 分隔横线、机构备注、`SCENE/COVER/END` 标签。这些特殊页排"一个统治性焦点 + 大留白"，页脚页码是正文页家具，放到首尾页一眼廉价。页码/页脚只属于普通内容页。
 
@@ -79,7 +79,7 @@ PPT 页面和讲稿都是**给观众看/听的成品**，只放观众需要的�
 
 ## 5. 页面与媒介规则
 
-普通页 root 直下使用 `.slide-title`、`.slide-body`、`.slide-footer`；封面用 `.slide--cover`，结尾用 `.slide--cover.slide--closing`，满铺页用 `.slide--bleed`。结尾把主张、短支撑和视觉锚点放进 `.closing-stage > .closing-core`：没有明确视觉配重时，让整个信息团水平、垂直光学居中；有明确 Hero 或图形配重时可以非对称，但必须在像素中形成稳定平衡。不得用 `justify-content:flex-start` 把结尾默认钉在顶部。正文用 grid、flex 或 arch flow；absolute 只用于 decor、scrim、watermark 等托底层，不拼正文。
+普通页 root 直下使用 `.slide-title`、`.slide-body`、`.slide-footer`；封面用 `.slide--cover`，结尾用 `.slide--cover.slide--closing`，**章节/过渡页用 `.slide slide--cover slide--section`**（满铺过渡再叠 `.slide--bleed`），满铺内容页用 `.slide--bleed`。⛔ 章节/过渡页只用标准的 `.slide--section`，**严禁自造 `.slide--divider` / `.slide--transition` 等类**（计划里的 `dividers` 是负责过渡页的 Slide 页组名，不是 CSS 类）。结尾把主张、短支撑和视觉锚点放进 `.closing-stage > .closing-core`：没有明确视觉配重时，让整个信息团水平、垂直光学居中；有明确 Hero 或图形配重时可以非对称，但必须在像素中形成稳定平衡。不得用 `justify-content:flex-start` 把结尾默认钉在顶部。正文用 grid、flex 或 arch flow；absolute 只用于 decor、scrim、watermark 等托底层，不拼正文。
 
 主信息要使用正文区，而不是停在中间一小团：表格、矩阵、时间轴、流程图和成组卡片默认横向撑满安全区，并让列宽/轨道承担可用空间。页面把 `.slide-body` 改成 grid 时显式使用 `justify-content:stretch`；只在有明确非对称构图理由时使用窄版。不要把“外围大空白 + 中央拥挤”误当成居中设计。
 
