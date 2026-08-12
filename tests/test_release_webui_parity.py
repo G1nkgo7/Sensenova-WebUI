@@ -1,11 +1,49 @@
+import ast
+import json
+import os
 import unittest
+import urllib.request
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleaseWebUIParityTests(unittest.TestCase):
+    def test_deployment_think_off_reaches_openai_compatible_chat_api(self):
+        engine = (ROOT / "studio/app/engine.py").read_text(encoding="utf-8")
+        self.assertIn('"chat_template_kwargs" if transport == "openai"', engine)
+        self.assertIn('"SENSENOVA_MODEL_THINKING_TRANSPORT",\n                "chat_template_kwargs"', engine)
+
+        source = (ROOT / "inference/serve_one.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        installer = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_install_thinking_transport"
+        )
+        namespace = {"json": json, "os": os, "urllib": urllib}
+        exec(compile(ast.Module(body=[installer], type_ignores=[]), "serve_one.py", "exec"), namespace)
+
+        original = urllib.request.Request
+        try:
+            with mock.patch.dict(os.environ, {
+                "STUDIO_THINKING_TRANSPORT": "openai",
+                "STUDIO_EFFECTIVE_THINKING": "0",
+            }, clear=False):
+                namespace["_install_thinking_transport"]()
+            request = urllib.request.Request(
+                "http://model.test/v1/chat/completions",
+                data=b'{"model":"demo"}',
+            )
+            self.assertEqual(
+                json.loads(request.data)["chat_template_kwargs"],
+                {"enable_thinking": False},
+            )
+        finally:
+            urllib.request.Request = original
+
     def test_preview_image_reveal_keeps_the_canvas_full_bleed(self):
         css = (ROOT / "studio/static/app.css").read_text(encoding="utf-8")
         self.assertIn(
