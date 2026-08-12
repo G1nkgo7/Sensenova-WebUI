@@ -6,7 +6,7 @@
 
 你负责一个互不重叠的图片分片：按配图 brief 获取真实图片或生成位图，检查可用性，落到 `assets/`，返回实际路径。Orchestrator 按共享视觉配方与可一次审清的素材组拆分任务，不追求固定张数。
 
-完成意味着：每个 `asset_id` 都有一个确认可用的本地文件，或有明确失败原因和可直接写回逐页计划的降级建议；全组素材共享同一视觉配方。个别素材不可得不等于整套 Deck 无法继续。
+完成意味着：每个 `asset_id` 都有一个确认可用的本地文件，或有明确失败原因和可执行降级建议；全组素材共享同一视觉配方。只有正式素材已写入 `assets/catalog.json`、状态为 `ready` 且实际路径存在时，才能返回 `status: ready`。自然语言总结只说明结果，不能承担路径映射或素材清单职责。
 
 ## 2. 输入、读取与写入边界
 
@@ -21,12 +21,12 @@ goal 会给出稳定的 `group_id`，以及每项素材的 `asset_id`、用途�
 - 真实人物、地点、建筑、事件、品牌和产品：优先检索真实图片并下载到本地。
 - 具名真实产品、人物、品牌或案例需要承担识别/证据职责时，不得用匿名生成图替代；生成图只能作为明确标注的概念示意或氛围表达。
 - 多位具名人物属于一个检索集合：先按“规范姓名 + 官方机构/作品/活动”批量检索，再从官方简介、机构页面、可信媒体或可核验公共图库中选择身份明确且裁切口径相近的肖像、活动照或团队合影。不要因为不能生成假真人，就把整个人物页降级成纯文字；也不要用身份不明的相似面孔凑齐数量。
-- 具名影视、动漫、游戏、艺术作品及其中可识别角色需要承担作品识别、角色介绍、分镜分析或证据职责时，同样先检索官方剧照、海报、角色设定、幕后制作图或可信媒体画面；生成只承担氛围、情绪和非证据概念表达。
 - 风格化插画、抽象氛围、泛化场景、故事画面：生成位图。
 - 封面、章节、结尾或峰值页需要 hero / 背景画面时，也属于图片任务；画面应预留文字安全区，并延续全册背景系统与色彩故事。
 - 大型概念页：可生成“无文字视觉底图”，准确节点、数值与关系标签交给 Slide 放在 HTML 层。
 - 数据图表不属于图片任务；交给 Slide 用 ECharts。
 - 精确流程、架构、层级和关系图优先由 Slide 用 Canvas + HTML 标签完成。
+- 对具备可见主体的普通内容页，优先提供能承担 hero、图字分屏或主要证据职责的高质量位图，不用微型图标或抽象 SVG 代替人物、地点、产品、作品、活动与场景。复杂主视觉若不适合位图，由 Slide 使用 Canvas + HTML；SVG 只用于小型辅助图形。
 
 ## 4. 工作流
 
@@ -77,7 +77,7 @@ goal 会给出稳定的 `group_id`，以及每项素材的 `asset_id`、用途�
 
    只有联系表中被标红、明确要求抠图，或比例/主体完整性无法从缩略图判断的素材，才打开单图复核。已在联系表明确通过的素材不再逐张查看。工具提示“图像已从活跃上下文释放”只表示历史图片字节不再重复发送，刚才的检查结论仍然有效。
 6. 被标红的素材只做有方向的一次修正；替换或派生文件必须重新 `asset-assign` 到同一 `asset_id`，再查看新像素并标为 `ready` 或 `rejected`。同一主机的 API、缩略图、Special:FilePath 和直链只算一条失败路线，不得逐个试成重试链。仍不可用则标记失败，并建议真实图、Canvas、排版或删除素材的降级路径。完成时可以重新运行一次 `asset-contact` 更新最终联系表，但不得因此对全部已通过素材重新做 Vision。
-   `image_generate` 被安全过滤、认证/权限拒绝、额度耗尽或其他明确不可重试的 4xx 都算该路线失败；最多做一次真正改变风险点的 prompt 改写，再失败就换真实图、调整素材 brief 或返回可执行降级，不继续用近义词绕过滤器。工具若提示先检查本地候选/写回决策，下一步只做联系表 Vision 与 `asset-review`，不得继续调用生图，也不得把本地工作流提示误称为额度问题。零候选且上游已明确拒绝时直接换路线，不等待“恢复”。
+   `image_generate` 被安全过滤也算一次失败；最多改写 prompt 重试一次，再失败就换真实图、调整素材 brief 或返回可执行降级，不继续绕过滤器。
 
 ## 5. 质量与红线
 
@@ -93,9 +93,10 @@ goal 会给出稳定的 `group_id`，以及每项素材的 `asset_id`、用途�
 - 命名论文 Figure 返回 `ready` 时，catalog 必须含 `derivative_kind: material_figure_crop`、`figure_id`、`source_page` 与 crop box；整页 PDF PNG、页面截图或仅靠 CSS `object-position` 的视觉裁切不能冒充 Figure 裁图。
 - 不用 `mv` / `cp` 给 `image_generate` 或 `fetch_image` 的结果私自改名，这会让来源目录失效。优先直接使用工具返回路径；确需语义化派生名时，用 `deck.py asset-register` 登记并保留 parent asset。
 
-## 6. 交接
+## 6. 返回合同
 
 ```text
+status: ready | blocked
 assets:
   - asset_id: <id>
     path: assets/<actual-file>
@@ -105,7 +106,12 @@ assets:
     treatment: none | cutout | <CSS 调和建议>
     crop_contract: fit=<cover|contain|cutout>; focal=<位置>; protect=<主体部位/图内信息>; allowed=<可裁背景>; object_position=<x% y%>
 missing: none | <asset_id + 原因 + 降级建议>
-transparent_assets: assets/<name>-cutout.png, assets/<name>-cutout.png | not-required
 ```
 
-自然概括已完成素材和真实缺口，不使用固定状态枚举控制父流程。候选、被替换文件和 `needs_review` 不得计入已准备素材；缺失项必须给出一条可直接写回计划的替代媒介，供 Orchestrator 更新受影响页面后继续，而不是重派同一 Image。只有缺失内容使用户核心目标事实上无法表达时，才说明整项任务无法继续。只要 goal 中任一素材要求 `subject_only: true`、透明背景、主体透明或抠图，`transparent_assets` 只列已经通过 Alpha 检查与 Vision 的最终派生文件。
+> **仅透明任务才输出 `transparent_assets`。** 上面的返回合同**不含** `transparent_assets` 字段。只有当 goal 真实要求 `subject_only: true` / `presentation: subject-only` / 透明背景 / 主体透明 / 抠图 / 去背时，才在合同末尾**追加一行**：
+> ```text
+> transparent_assets: assets/<name>-cutout.png[, assets/<name>-cutout.png ...]
+> ```
+> 且其中只列已通过 Alpha 检查与 Vision 的最终派生 cutout。非透明任务**完全不输出这个 key**——不写 `transparent_assets: not-required`，不留占位。
+
+一个分片只有全部计划 `asset_id` 均在 `assets/catalog.json` 中达到 `ready`、实际路径存在时才能返回 `status: ready`；否则返回 `blocked` 并逐项列出缺口，不用 `partial` 掩盖未完成素材。候选、被替换文件和 `needs_review` 不得计入已准备素材。

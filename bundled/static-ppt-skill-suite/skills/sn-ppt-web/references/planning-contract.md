@@ -109,8 +109,10 @@
 
 ## 视觉实现
 - medium：photo | generated image | canvas+HTML labels | ECharts | typography | small SVG icon；同时点明本页的**主要视觉载体**。`small SVG icon`、边框、空面板和装饰线只能辅助，不能冒充主要视觉；选择 typography 时说明文字如何通过尺度、层级和构图独立成立
-- image_opportunity：先写值得被看见的主体/场景，以及图片能增加的证据、识别、临场感或情绪价值，再决定媒介。没有项目实拍不等于没有图片机会；尚未建成的空间、虚构人物、服务场景与风格化主视觉可考虑统一风格的生成图。具名真实人物、主创、嘉宾或团队成员是默认的真实图片机会：应规划批量检索肖像、官方简介照、活动照或团队合影；“不生成假真人”意味着改走真图检索，不意味着 `none`。具名作品、软件/产品、制作流程和真实案例也应先检查官方画面、界面、幕后图、过程拆解、实物或现场照片，而不是直接退成小图标与空卡片。若为 none，说明真实检索后仍不可得且位图为何不增加听众价值，或为何会比图表/Canvas/排印更含糊；“CSS 更可控”“没有实拍”“担心 AI 出错”“为了风格统一”不是单独成立的 none 理由
-- presentation：subject-only | framed-scene | full-bleed | evidence-crop（存在位图时必填）。角色、产品或物件需要悬浮、跨色场叠放或作为独立元素时必须选 `subject-only`，并在素材 brief 写 `subject_only: true`；其他三种必须把原图背景作为有意的画面、满幅或证据边界，不能偶然露出矩形底色
+- image_opportunity：**只写一个机器可读枚举**，不带任何解释：`real_required` / `generated_ok` / `none` / `chart_only` / `canvas_only` / `typography_only`（`none` 及 `*_only` 判定为无位图）。启动 gate 与最终验收只解析这一行的枚举；理由另写在下一行的 `image_opportunity_reason`，绝不写进本行。
+- image_opportunity_reason：人类可读理由（一句话）。判定内容：先写值得被看见的主体/场景，以及图片能增加的证据、识别、临场感或情绪价值，再决定媒介。没有项目实拍不等于没有图片机会；尚未建成的空间、虚构人物、服务场景与风格化主视觉可考虑统一风格的生成图。具名真实人物、主创、嘉宾或团队成员是默认的真实图片机会：应规划批量检索肖像、官方简介照、活动照或团队合影；“不生成假真人”意味着改走真图检索，不意味着 `none`。具名作品、软件/产品、制作流程和真实案例也应先检查官方画面、界面、幕后图、过程拆解、实物或现场照片，而不是直接退成小图标与空卡片。若为 `none`，理由须说明真实检索后仍不可得且位图为何不增加听众价值，或为何会比图表/Canvas/排印更含糊；“CSS 更可控”“没有实拍”“担心 AI 出错”“为了风格统一”不是单独成立的 none 理由
+- presentation：位图的**展示/背景处理合同**，取值**只能是四枚举之一**：`subject-only` | `framed-scene` | `full-bleed` | `evidence-crop`。**有位图页必填、无位图页完全省略这一行**（不要写 `无` / `none` / `not-applicable` 占位）。⛔ `split-media` / `right-half` / `cards` / `分屏` / `左右` 等是**版式/构图（layout/arch）**，绝不能写进 presentation；它们放到 `layout` 行。角色、产品或物件需要悬浮、跨色场叠放或作为独立元素时必须选 `subject-only`，并在素材 brief 写 `subject_only: true`；其他三种必须把原图背景作为有意的画面、满幅或证据边界，不能偶然露出矩形底色。（例：夜间阅读实拍用于左右分屏 → `presentation: framed-scene`，分屏本身写在 `layout`。）
+- asset_id：每个位图机会写一个稳定 `asset_id`（英数/下划线，跨页唯一）；Image 完成后由编排器把 `asset_id → 实际路径 + origin + crop_contract` 回填到本行。无位图页不写。
 - layout：区域比例、对齐、视觉重心
 - spatial_budget：主焦点、文字、证据视觉分别占用哪些区域；剩余空间是呼吸、动线还是待消除的死白。`dense` 页的主信息不得只挤在半张画布或一条窄带，否则先改空间分配而不是留给 Slide 猜
 - background_treatment：本页如何使用全册背景系统；先声明沿用 `base_canvas_family`、局部色场/环境光、主题肌理、图片背景还是有叙事理由的整页变体，再说明与前后页的颜色/明度/肌理承接。普通内容页优先保留基础画布，把章节差异放进局部大色场、图片调色、条带或母题状态。表达型场景若选择纯色页，应说明它承担呼吸、对比或换场，而不是因为没有继续设计背景
@@ -128,7 +130,7 @@
 - quality-checklist.md：单页检查
 
 ## 来源
-- <屏显事实对应来源；无外部来源则写 user-provided / none>
+- <内部溯源字段，仅供讲稿引用与自查，**绝不上屏**；写屏显事实对应来源，无外部来源则写 user-provided / none。文件路径 / 章节锚点（如 `research/research.md §二.4`）只能留在此处，绝不作为页面 source 印出>
 
 ## 口语讲稿
 <可直接朗读，不机械复读屏显，不朗读来源>

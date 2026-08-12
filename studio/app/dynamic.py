@@ -68,7 +68,7 @@ def _is_admin(user) -> bool:
 
 def _model_registry(user=None) -> dict[str, dict]:
     """Reuse the Web Demo model registry and its gitignored credentials."""
-    env = engine._read_env_file(engine.DISTILL_DIR / ".env")
+    env = engine._read_env_file(engine.INFERENCE_DIR / ".env")
     out = {}
     for key, model in engine.user_selectable_models():
         if model.get("backend") != "openai":
@@ -357,7 +357,7 @@ async def send(request: Request, user=Depends(_require_user)):
     }
 
     try:
-        shared_env = engine._read_env_file(engine.DISTILL_DIR / ".env")
+        shared_env = engine._read_env_file(engine.INFERENCE_DIR / ".env")
         services = service_config.runtime_payload(user["id"])
         generation_limits = services["generation"]
         image_service = services.get("image_generation")
@@ -436,7 +436,7 @@ async def regenerate(request: Request, user=Depends(_require_user)):
     services = service_config.runtime_payload(user["id"])
     generation_limits = services["generation"]
     image_service = services.get("image_generation")
-    shared_env = engine._read_env_file(engine.DISTILL_DIR / ".env")
+    shared_env = engine._read_env_file(engine.INFERENCE_DIR / ".env")
     requested_thinking = bool(source_meta.get("requested_thinking", True))
     thinking_transport = bool(model.get("thinking_transport"))
     effective_thinking = requested_thinking and thinking_transport

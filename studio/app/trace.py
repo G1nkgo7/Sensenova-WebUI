@@ -172,7 +172,7 @@ def _phase(prog, rd, status, task_pack=None):
 # 旧格式:[u6_d14/slide_04_r2] 🔧 edit({"path": "slides/slide_04.html", ...
 # 新格式:[09:01:28 + 706.0s] [u6_d14/orchestrator] [3] 💬 我先读取 skill 说明…
 # 时间前缀由当前 clean Harness 输出；保持可选以兼容历史 deck 日志。
-_TIMING_PREFIX_RE = r"(?:\[\d{2}:\d{2}:\d{2} \+\s*\d+(?:\.\d+)?s\]\s+)?"
+_TIMING_PREFIX_RE = r"(?:\[(\d{2}:\d{2}:\d{2}) \+\s*(\d+(?:\.\d+)?)s\]\s+)?"
 _FEED_RE = re.compile(
     _TIMING_PREFIX_RE
     + r"\[[^/\]]+/([^\]]+)\] (?:🔧 (\w+)\((.*)|\[\d+\] 💬 (.*))"
@@ -182,7 +182,7 @@ _PLAN_GROUP_RE = re.compile(
     r"^\s*-\s*production_group\s*[:：]\s*[`\"']?([A-Za-z0-9._-]+)", re.I | re.M,
 )
 _SLIDE_REF_RE = re.compile(r"(?:slide_|page_)0*(\d{1,3})(?=\D|$)", re.I)
-_PAGES_ARG_RE = re.compile(r"--pages(?:=|\s+)([0-9][0-9,\s]*)", re.I)
+_PAGES_ARG_RE = re.compile(r"--pages(?:=|[ \t]+)([0-9][0-9, \t]*)", re.I)
 
 
 def _agent_alias_from_task(task, fallback):
@@ -389,7 +389,83 @@ def _streaming_delta_events(role_dir, messages, response_language, sequence):
     return events
 
 
-def _live_trace_events(run_dir, aliases, response_language, active_keys):
+def _same_live_event(canonical, streamed):
+    """Match one durable trace event to its globally ordered runner-log row."""
+    if canonical.get("k") != streamed.get("k"):
+        return False
+    if canonical.get("k") == "tool":
+        return str(canonical.get("tool") or "") == str(streamed.get("tool") or "")
+    left = re.sub(r"\s+", " ", str(canonical.get("s") or "")).strip()
+    right = re.sub(r"\s+", " ", str(streamed.get("s") or "")).strip()
+    if not left or not right:
+        return False
+    # The compact stdout row commonly contains only the first line / first 800
+    # characters, while messages.json retains the complete Assistant response.
+    return left == right or left.startswith(right) or right.startswith(left)
+
+
+def _inherit_live_event_positions(canonical, streamed):
+    """Keep global runner order/times when atomic traces replace compact rows.
+
+    Agent-local messages.json files all begin at sequence zero.  Treating those
+    values as global sequence numbers made completed workers jump to the top of
+    the process timeline.  The runner log is the shared event stream, so match
+    durable events back to it and retain its global position and wall-clock.
+    """
+    if not canonical:
+        return canonical
+    source = list(streamed or [])
+    cursor = 0
+    matched = []
+    for canonical_index, event in enumerate(canonical):
+        # Streaming projections carry an Agent-local sequence. It is useful
+        # only inside that one trace and must never be treated as global.
+        event.pop("seq", None)
+        match_index = None
+        for index in range(cursor, len(source)):
+            if _same_live_event(event, source[index]):
+                match_index = index
+                break
+        if match_index is None:
+            continue
+        original = source[match_index]
+        for field in ("seq", "clock", "elapsed_s"):
+            if original.get(field) is not None:
+                event[field] = original[field]
+        matched.append((canonical_index, float(original.get("seq", match_index))))
+        cursor = match_index + 1
+
+    # A rare trace-only block can be absent from stdout (for example a streamed
+    # final delta). Place it between its nearest matched neighbours instead of
+    # assigning another Agent-local zero. Fractional sequence values remain
+    # stable and sort naturally next to the surrounding global events.
+    anchors = {index: order for index, order in matched}
+    for index, event in enumerate(canonical):
+        if event.get("seq") is not None:
+            continue
+        previous = next(((i, anchors[i]) for i in range(index - 1, -1, -1) if i in anchors), None)
+        following = next(((i, anchors[i]) for i in range(index + 1, len(canonical)) if i in anchors), None)
+        if previous and following:
+            span = following[0] - previous[0]
+            event["seq"] = previous[1] + (following[1] - previous[1]) * ((index - previous[0]) / span)
+        elif previous:
+            event["seq"] = previous[1] + (index - previous[0]) / 1000
+        elif following:
+            event["seq"] = following[1] - (following[0] - index) / 1000
+        elif source:
+            # The durable text can differ from the compact runner row after
+            # localization/normalization.  It still belongs at this Agent's
+            # first globally observed position, never at a new local zero.
+            event["seq"] = float(source[0].get("seq", 0)) + index / 1000
+            for field in ("clock", "elapsed_s"):
+                if source[0].get(field) is not None:
+                    event[field] = source[0][field]
+        else:
+            event["seq"] = index
+    return canonical
+
+
+def _live_trace_events(run_dir, aliases, response_language, active_agents):
     """Read complete in-progress Assistant turns from atomic Harness traces.
 
     Only agents already present in the current runner log are eligible.  This
@@ -409,7 +485,7 @@ def _live_trace_events(run_dir, aliases, response_language, active_keys):
         if str(config.get("role") or "").lower() == "orchestrator":
             raw_agent = "orch"
         key = _livefeed_agent_key(raw_agent, aliases)
-        if key not in active_keys:
+        if key not in active_agents:
             continue
         messages = _read_trace_json(os.path.join(role_dir, "messages.json"), [])
         if not isinstance(messages, list):
@@ -432,7 +508,7 @@ def _live_trace_events(run_dir, aliases, response_language, active_keys):
                         str(block.get("text") or ""), response_language
                     )
                     if value:
-                        events.append({"k": "text", "s": value, "seq": sequence})
+                        events.append({"k": "text", "s": value})
                         sequence += 1
                 elif kind == "tool_use":
                     args = block.get("input") if isinstance(block.get("input"), dict) else {}
@@ -445,7 +521,6 @@ def _live_trace_events(run_dir, aliases, response_language, active_keys):
                         "k": "tool",
                         "tool": str(block.get("name") or "tool"),
                         "hint": hint,
-                        "seq": sequence,
                     })
                     sequence += 1
         events.extend(
@@ -454,7 +529,7 @@ def _live_trace_events(run_dir, aliases, response_language, active_keys):
             )
         )
         if events:
-            result[key] = events
+            result[key] = _inherit_live_event_positions(events, active_agents.get(key, []))
     return result
 
 
@@ -491,6 +566,28 @@ def _trace_iso(timestamp):
     if not timestamp:
         return None
     return datetime.fromtimestamp(float(timestamp), timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _attach_absolute_event_times(agents, overall_timing):
+    """Attach UTC timestamps to elapsed-only process events.
+
+    Harness stdout historically carries a host-local ``HH:MM:SS`` clock.  That
+    value has no timezone and must not be sent to the browser as an absolute
+    time.  The persisted run start is UTC, so combine it with each monotonic
+    elapsed value and expose an explicit ``Z`` timestamp instead.
+    """
+    started_at = _trace_timestamp((overall_timing or {}).get("started_at"))
+    if started_at is None:
+        return
+    for events in agents.values():
+        for event in events:
+            try:
+                elapsed_s = float(event.get("elapsed_s"))
+            except (TypeError, ValueError):
+                continue
+            if elapsed_s < 0:
+                continue
+            event["ts"] = _trace_iso(started_at + elapsed_s)
 
 
 def _trace_pid_alive(pid):
@@ -702,7 +799,7 @@ def livefeed(log_path, max_bytes=8 * 1024 * 1024, per_agent=240, run_dir=None):
         m = _FEED_RE.match(line)
         if not m:
             continue
-        raw_agent, tool, args, text = m.groups()
+        clock, elapsed_s, raw_agent, tool, args, text = m.groups()
         key = _livefeed_agent_key(raw_agent, aliases)
         if key.startswith("slide_group_"):
             for page in _group_event_pages(args or ""):
@@ -711,7 +808,12 @@ def livefeed(log_path, max_bytes=8 * 1024 * 1024, per_agent=240, run_dir=None):
         if tool:
             hm = _HINT_RE.search(args or "")
             hint = hm.group(1) if hm else (args or "")[:48]
-            lst.append({"k": "tool", "tool": tool, "hint": hint, "seq": sequence})
+            event = {"k": "tool", "tool": tool, "hint": hint, "seq": sequence}
+            if clock:
+                event["clock"] = clock
+            if elapsed_s is not None:
+                event["elapsed_s"] = float(elapsed_s)
+            lst.append(event)
         else:
             t = _visible_text_for_language(text, response_language)
             # Old live logs and revision logs may contain the same progress
@@ -721,16 +823,22 @@ def livefeed(log_path, max_bytes=8 * 1024 * 1024, per_agent=240, run_dir=None):
                 lst and lst[-1].get("k") == "text"
                 and str(lst[-1].get("s") or "").strip() == t[:800].strip()
             ):
-                lst.append({"k": "text", "s": t[:800], "seq": sequence})
+                event = {"k": "text", "s": t[:800], "seq": sequence}
+                if clock:
+                    event["clock"] = clock
+                if elapsed_s is not None:
+                    event["elapsed_s"] = float(elapsed_s)
+                lst.append(event)
     # stdout keeps the UI responsive before the first model response lands;
     # once the atomic trace exists, prefer its complete untruncated turns.
     for key, events in _live_trace_events(
-        run_dir, aliases, response_language, set(agents)
+        run_dir, aliases, response_language, agents
     ).items():
         agents[key] = events
     _append_subagent_summaries(
         agents, run_dir, len(chunk.split("\n")) + 1, aliases, response_language
     )
+    _attach_absolute_event_times(agents, overall_timing)
     for k in agents:
         agents[k] = agents[k][-per_agent:]
     return {

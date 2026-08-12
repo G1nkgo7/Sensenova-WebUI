@@ -47,7 +47,8 @@ from font_bundle import (
 
 def _detect_canvas(base_dir):
     """从工作区的 base.css 探测画布尺寸(--canvas-w/--canvas-h)。
-    找不到就回退默认横版 1600×900;运行时 JS 还会从 .slide 复测兜底。"""
+    兼容旧版 --w/--h 和直接写在 .slide 上的像素尺寸；找不到时回退
+    默认横版 1600×900。播放器与 PNG 渲染必须使用同一组确定尺寸。"""
     w, h = 1600, 900
     for cand in ("base.css", os.path.join("slides", "base.css")):
         path = os.path.join(base_dir, cand)
@@ -57,11 +58,17 @@ def _detect_canvas(base_dir):
             css = open(path, encoding="utf-8").read()
         except Exception:
             continue
-        mw = re.search(r"--w:\s*([0-9.]+)px", css)
-        mh = re.search(r"--h:\s*([0-9.]+)px", css)
-        if mw and mh:
-            w, h = int(float(mw.group(1))), int(float(mh.group(1)))
-            break
+        for width_name, height_name in (("--canvas-w", "--canvas-h"), ("--w", "--h")):
+            mw = re.search(rf"{re.escape(width_name)}:\s*([0-9.]+)px", css)
+            mh = re.search(rf"{re.escape(height_name)}:\s*([0-9.]+)px", css)
+            if mw and mh:
+                return int(float(mw.group(1))), int(float(mh.group(1)))
+        slide = re.search(r"\.slide\b[^{}]*\{([^{}]*)\}", css, re.S)
+        if slide:
+            mw = re.search(r"\bwidth:\s*([0-9.]+)px", slide.group(1))
+            mh = re.search(r"\bheight:\s*([0-9.]+)px", slide.group(1))
+            if mw and mh:
+                return int(float(mw.group(1))), int(float(mh.group(1)))
     return w, h
 
 
@@ -119,6 +126,52 @@ VISUAL_HEADINGS = {"视觉实现", "visual implementation", "visual handoff", "v
 PAGE_RE = re.compile(r"^slide_(\d+)\.png$")
 _PICTOGRAPH_RE = re.compile(r"[\u2600-\u27bf\U0001f000-\U0001faff]")
 _IMAGE_PRESENTATIONS = {"subject-only", "framed-scene", "full-bleed", "evidence-crop"}
+
+# The no-bitmap machine-enum decision, kept identical to the startup dispatch
+# gate so a page's bitmap need reads the same at plan time and at build time
+# (a page that declares no-bitmap must never be judged a raster page).
+_NO_BITMAP_VALUES = {
+    "none", "no", "code", "code_only", "code-only", "canvas",
+    "canvas_only", "canvas-only", "chart", "chart_only", "chart-only",
+    "typography", "typography_only", "typography-only",
+}
+_NO_BITMAP_CJK_RE = re.compile(
+    r"^(?:无|none|无需|不需|不用)?"
+    r"(?:位图|配图|图片|图像|插图|图)?"
+    r"(?:需求|机会)?$"
+)
+_NO_BITMAP_CJK_VALUES = {
+    "无", "无位图", "无需配图", "不需配图", "无需图片", "无需图像",
+    "无需插图", "无图", "无需位图", "不需要配图", "不需要图片", "无配图",
+    "无位图需求", "无配图需求",
+}
+_IMAGE_OPPORTUNITY_RE = re.compile(
+    r"(?im)^\s*[-*+]?\s*(?:\*\*)?image_opportunity(?:\*\*)?\s*[:：]\s*(.+?)\s*$"
+)
+
+
+def _normalize_image_opportunity(raw_value: str) -> str:
+    value = str(raw_value or "").strip().lower()
+    match = re.match(r"([a-z][a-z0-9_-]*)", value)
+    if match:
+        return match.group(1)
+    return re.split(r"[\s,，;；(/（]", value, maxsplit=1)[0]
+
+
+def _image_opportunity_needs_bitmap(raw_value: str) -> bool:
+    """Machine-enum truth: a page needs a bitmap unless its declared opportunity
+    is a no-bitmap enum (``none``, ``chart_only`` …) or a CJK equivalent."""
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return False
+    if _normalize_image_opportunity(raw) in _NO_BITMAP_VALUES:
+        return False
+    cjk_head = re.split(r"[\s,，;；:：(/（]", raw, maxsplit=1)[0].strip()
+    if cjk_head in _NO_BITMAP_CJK_VALUES:
+        return False
+    if _NO_BITMAP_CJK_RE.fullmatch(cjk_head) and re.search(r"[无不]", cjk_head):
+        return False
+    return True
 
 
 def _normalize_heading(value: str) -> str:
@@ -206,14 +259,34 @@ def _validate_image_presentations(root: Path, expected: int | None) -> None:
     """Require one explicit rendering contract for every planned raster page."""
     errors = []
     for _, path in _plan_files(root, expected):
-        visual = _first_section(_sections(path.read_text(encoding="utf-8")), VISUAL_HEADINGS)
-        raster_medium = re.search(
-            r"(?im)^\s*[-*+]\s*medium\s*[:：].*(?:photo|photograph|generated[ -]?image|bitmap|raster|生成图|位图|照片)",
-            visual,
+        text = path.read_text(encoding="utf-8")
+        visual = _first_section(_sections(text), VISUAL_HEADINGS)
+        # Machine-enum first: a page that declares no-bitmap (none / chart_only /
+        # canvas_only / typography_only / CJK 无位图) is NOT a raster page.  This
+        # must win over a medium-string regex, which would false-positive on the
+        # substring 位图 inside 无位图.
+        opportunity = _IMAGE_OPPORTUNITY_RE.search(text)
+        declares_bitmap = _image_opportunity_needs_bitmap(
+            opportunity.group(1) if opportunity else ""
         )
-        raster_path = re.search(r"(?i)assets/[A-Za-z0-9_./-]+\.(?:png|jpe?g|webp|gif)", visual)
-        if not raster_medium and not raster_path:
-            continue
+        # A real raster asset path is authoritative evidence of a bitmap page.
+        raster_path = re.search(
+            r"(?i)assets/[A-Za-z0-9_./-]+\.(?:png|jpe?g|webp|gif)", visual)
+        if opportunity is not None:
+            # image_opportunity declared: trust the enum.  No-bitmap + no real
+            # asset path → not a raster page, skip (no medium false-positive).
+            if not declares_bitmap and not raster_path:
+                continue
+        else:
+            # Legacy plan without image_opportunity: fall back to medium/path.
+            raster_medium = re.search(
+                r"(?im)^\s*[-*+]\s*medium\s*[:：]"
+                r".*(?:photo|photograph|generated[ -]?image|bitmap|raster|生成图|照片"
+                r"|(?<![无不])位图)",
+                visual,
+            )
+            if not raster_medium and not raster_path:
+                continue
         match = re.search(
             r"(?im)^\s*[-*+]\s*presentation\s*[:：]\s*`?([A-Za-z-]+)", visual
         )
@@ -293,8 +366,32 @@ def _ensure_canvas_reset(root: Path) -> None:
             raise ValueError(f"base.css and its template are missing: {template}")
         shutil.copy2(template, path)
     text = path.read_text(encoding="utf-8", errors="ignore")
+    original = text
     if _CANVAS_RESET_MARKER not in text:
-        _atomic_text(path, _CANVAS_RESET + "\n" + text.lstrip())
+        text = _CANVAS_RESET + "\n" + text.lstrip()
+
+    # A page that declares width:var(--canvas-w) without defining the variable
+    # renders at its intrinsic content width in a browser.  The PNG renderer
+    # still has a fixed viewport, so the two outputs silently diverge.  Supply
+    # deterministic defaults (without overriding later theme declarations) and
+    # migrate workspaces produced by the older reset-only implementation.
+    missing = []
+    if not re.search(r"--canvas-w:\s*[0-9.]+px", text):
+        missing.append("--canvas-w")
+    if not re.search(r"--canvas-h:\s*[0-9.]+px", text):
+        missing.append("--canvas-h")
+    if missing:
+        width, height = _detect_canvas(root)
+        declarations = []
+        if "--canvas-w" in missing:
+            declarations.append(f"--canvas-w: {width}px")
+        if "--canvas-h" in missing:
+            declarations.append(f"--canvas-h: {height}px")
+        defaults = ":root { " + "; ".join(declarations) + "; }"
+        text = text.replace(_CANVAS_RESET_MARKER, _CANVAS_RESET_MARKER + "\n" + defaults, 1)
+
+    if text != original:
+        _atomic_text(path, text)
 
 
 def _normalize_runtime_references(root: Path) -> None:
@@ -791,12 +888,13 @@ def _validate_render_quality(root: Path, expected: int | None) -> None:
             errors.append(f"slide_{key}: HTML changed after structured render")
         if _sha256_path(png) != record.get("png_sha256"):
             errors.append(f"slide_{key}: PNG changed outside canonical renderer")
-        # Older renderer snapshots may have persisted ``boxoverflow`` as a
-        # hard issue.  It is now an advisory bbox candidate: only current
-        # pixel/DOM evidence can turn it into a real repair.  Filtering here
-        # keeps historical decks editable without forcing a destructive
-        # shrink-to-clear cycle.
-        advisory_types = {"boxoverflow", "overlap", "crowded", "cjktypography", "contrast"}
+        # Older renderer snapshots may have persisted heuristic geometry or
+        # typography candidates as hard issues.  They are advisory now: only
+        # fresh pixel/DOM evidence can turn one into a real repair.  Filtering
+        # here keeps historical decks editable without a shrink-to-clear loop.
+        advisory_types = {
+            "boxoverflow", "overlap", "crowded", "cjktypography", "contrast",
+        }
         hard = [
             item for item in (record.get("hard_issues") or [])
             if str(item.get("type") or "").lower() not in advisory_types
@@ -994,18 +1092,16 @@ body.hud #hud{opacity:1}</style></head>
 <script>
 const S=__SLIDES__;let i=0;const fr=[];
 let resolveFontsReady;const fontsReady=new Promise(resolve=>{resolveFontsReady=resolve;});
-let CW=__CW__,CH=__CH__;   /* build 时从 base.css 探测的画布尺寸;运行时再从 .slide 复测兜底 */
+let CW=__CW__,CH=__CH__;   /* build 时从 base.css 探测的确定画布尺寸 */
 const wrap=document.getElementById('wrap'),p=document.getElementById('p'),bar=document.getElementById('bar');
 const fit=()=>{wrap.style.width=CW+'px';wrap.style.height=CH+'px';
 wrap.style.transform='scale('+Math.min(innerWidth/CW,innerHeight/CH)+')';};
-/* 从已加载的 iframe 里读 .slide 真实像素尺寸,校正画布(处理 base.css 未用 --canvas-* 或 build 探测失准的情况) */
-/* 用 offsetWidth/Height(.slide 的 border-box = 画布真实尺寸),不用 scrollWidth/Height:后者会把画到
-   画布外、被 .slide overflow:hidden 视觉裁掉的装饰(halftone 圆/斜切色块等,常伸出画布)也算进去,
-   于是画布被撑成 1710/1950 之类 → 整册被多缩、右侧留黑边;且各页溢出量不同 + CW/CH 全局共享,
-   相邻页懒加载先后会互相污染当前页缩放(偶发)。offset 只量 .slide 盒本身,横竖版都对。 */
+/* 只接受显式画布变量，不用内容的 offset/scroll 尺寸反推画布。后者会在变量缺失、
+   字体尚未稳定或装饰溢出时把某一页的内容宽度误当成整册画布，造成播放器与 PNG 不一致。 */
 function remeasure(e){try{const d=e.contentDocument;if(!d)return;
-const el=d.querySelector('.slide')||d.body;if(!el)return;
-const w=Math.round(el.offsetWidth||el.scrollWidth),h=Math.round(el.offsetHeight||el.scrollHeight);
+const style=d.defaultView&&d.defaultView.getComputedStyle(d.documentElement);if(!style)return;
+const w=Math.round(parseFloat(style.getPropertyValue('--canvas-w'))||0);
+const h=Math.round(parseFloat(style.getPropertyValue('--canvas-h'))||0);
 if(w>50&&h>50&&(Math.abs(w-CW)>1||Math.abs(h-CH)>1)){CW=w;CH=h;fit();}}catch(err){}}
 function ensure(n){if(n<0||n>=S.length)return null;if(fr[n])return fr[n];
 const e=document.createElement('iframe');e.dataset.ok='0';e.dataset.slide=String(n+1);e.title='slide '+(n+1);

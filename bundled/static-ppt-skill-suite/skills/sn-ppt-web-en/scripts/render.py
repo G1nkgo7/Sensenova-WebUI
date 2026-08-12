@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HTML -> PNG 渲染脚本(long-horizon-presenter 自带,可移植)。
+"""HTML -> PNG 渲染脚本(sn-ppt-web-en 自带,可移植)。
 
 任何有 shell / 代码执行能力的脚手架都能直接跑它来渲染一页幻灯片,**不依赖宿主提供 render 工具**:
 
@@ -37,7 +37,7 @@ os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", os.path.expanduser("~/.cache/m
 #   仅当 /dev/shm 是默认小盘(Docker 64MB)时才该加;若 /dev/shm 是大 RAM tmpfs(CCI=128G),
 #   加了反而把 shm 从「快 RAM」赶到「慢磁盘 overlay /tmp」→ 高并发磁盘 I/O 风暴 → D-state → 崩池。
 #   故按 /dev/shm 实际大小动态决定(env RENDER_FORCE_DISABLE_DEVSHM=1 强制加 / =0 强制不加)。
-#   ⚠️ 本补丁位于 skill 目录内,同步/覆盖 skill 会冲掉,覆盖后须重打(见 memory distill-brokenpool-chromium-exhaustion)。
+#   ⚠️ 本补丁位于 skill 目录内,同步/覆盖 skill 会冲掉,覆盖后须重打(见 memory render-brokenpool-chromium-exhaustion)。
 def _devshm_bytes():
     try:
         st = os.statvfs("/dev/shm")
@@ -1223,13 +1223,13 @@ _HARD_RENDER_KEYS = (
     "broken", "overflow",
 )
 
-# ``boxoverflow`` is intentionally advisory.  It compares child and parent
-# bounding boxes, so transformed type, optical punctuation, visible overflow
-# and deliberate editorial overlap can all trigger it even when no pixels are
-# clipped or unreadable.  Treating that signal as a process exit condition made
-# Slide/Review agents repeatedly shrink otherwise sound pages merely to clear a
-# checker.  The report is still persisted for DOM diagnosis; fresh rendered
-# pixels decide whether it is a real defect.
+# Geometry and typography heuristics (``boxoverflow``, ``overlap``, ``crowded``,
+# ``cjkTypography`` and contrast candidates) are intentionally advisory.  They
+# are useful diagnostic leads, but transforms, optical punctuation, intentional
+# editorial overlap and stylised CJK can trigger them on perfectly readable
+# pixels.  Only broken assets, confirmed overflow/clipping, runtime errors and
+# footer displacement are deterministic render blockers.  Advisory findings
+# remain in render.json for Slide/Review to verify against fresh pixels.
 
 
 def _sha256_file(path):
@@ -1756,7 +1756,7 @@ def main():
                         print("   · 「%s」<%s> 字号 %spx" % (e.get("txt"), e.get("cls"), e.get("fs")))
                 cjk_typography = rep.get("cjkTypography") or []
                 if cjk_typography:
-                    print("⚠ CJK-TYPE: %d Chinese typography defect(s). Keep each Chinese sentence in one family; emphasize with color, weight, or size. Do not apply mono or wide Latin tracking to Chinese. Playful or handwritten CJK requires a justified `.is-expressive-type` marker:" % len(cjk_typography))
+                    print("⚠ CJK-TYPE: %d 处中文字体语义错误——同一句中文必须保持同一字体家族；强调只改颜色/字重/字号。中文不得误用 mono 或拉丁式疏字距；卡通/手写体只有合题且加 `.is-expressive-type` 才允许：" % len(cjk_typography))
                     for e in cjk_typography:
                         print("   · 「%s」<%s> %s, letter-spacing=%spx"
                               % (e.get("text"), e.get("cls"), "/".join(e.get("kinds") or []), e.get("letterSpacing")))

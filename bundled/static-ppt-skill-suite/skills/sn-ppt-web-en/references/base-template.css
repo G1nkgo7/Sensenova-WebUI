@@ -42,29 +42,27 @@
      用主色/辅助色的深浅 + 同色系冷暖偏移派生;别用调色板外色相,别和默认 ECharts 调色板。 */
   --series-1: #c9a227;  /* TODO = 主色 */
   --series-2: #5a7ca0;  /* TODO = 辅助色 */
-  --series-3: #e0c463;  /* TODO lighter primary */
-  --series-4: #3f5d7a;  /* TODO darker secondary */
-  --series-5: #9a7d1f;  /* TODO darker primary */
-  --series-6: #86a6c4;  /* TODO lighter secondary */
+  --series-3: #e0c463;  /* TODO 主色提亮 */
+  --series-4: #3f5d7a;  /* TODO 辅助色压暗 */
+  --series-5: #9a7d1f;  /* TODO 主色压暗 */
+  --series-6: #86a6c4;  /* TODO 辅助色提亮 */
 
-  /* —— Font tokens —— */
+  /* —— 字体 token —— */
   --font-sans:  "Noto Sans SC", "IBM Plex Sans", system-ui, sans-serif;
   --font-serif: "Noto Serif SC", "Spectral", serif;
   --font-body:  var(--font-sans);
-  --font-title: var(--font-sans);   /* Sans by default; cover/hero may intentionally choose serif, heavy sans, or calligraphy. */
-  /* —— Display, calligraphic, and handwritten faces ——
-     Use only registered OFL-1.1 fonts. Covers and hero pages may combine distinct roles deliberately:
-     calligraphic title, heavy sans hero, serif/kai label, and handwritten annotation.
-     Use --font-sans for body/chart labels, --font-number for large KPIs/chapter numerals, and --font-mono only for technical IDs.
-     font_bundle.py maps the selected roles to portable deck-local WOFF2 files at delivery time. */
-   --font-hei-heavy:     "Noto Sans SC", "Smiley Sans", sans-serif;      /* Noto 900 by default; use Smiley Sans only when explicitly selected. */
-   --font-brush:         "Ma Shan Zheng", "Noto Serif SC", cursive;      /* Brush display for culture, travel, tradition, and humanist quotations. */
-   --font-kai:           "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* Clear handwritten display for chapters, quotations, and humanist titles; declare intentional use */
-   /* —— Two handwriting tiers; reserve cursive faces for large hero text only. —— */
-   --font-write:         "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* Notes, short quotations, and short display text; never formal body copy */
-   --font-write-cursive: "Liu Jian Mao Cao", "Long Cang", "Ma Shan Zheng", cursive; /* Google Fonts OFL cursive faces; large display text only. */
-   --font-playful:       "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;     /* Playful display for youth, consumer, children, and comics. */
-   --font-round:         "ZCOOL QingKe HuangYou", "ZCOOL KuaiLe", "Noto Sans SC", sans-serif; /* Rounded display for friendly or playful themes. */
+  --font-title: var(--font-sans);   /* 标题:默认黑体;封面/hero 可换 serif/黑体/书法(见下) */
+  /* —— 展示 / 书法 / 手写体(封面·hero·金句·批注;仅使用已登记 OFL-1.1 字体)——
+     用法:封面/hero **常同屏多款各司其职**(书法主标题 + 超粗黑体大字 hero + 宋/楷小标签 + 手写批注);
+     正文/图表标注用 --font-sans；大 KPI/章节数字用 --font-number；技术编号才用 --font-mono。创作时使用本地栈；交付时 font_bundle.py 将实际角色映射为 Deck 自带 WOFF2。 */
+   --font-hei-heavy:     "Noto Sans SC", "Smiley Sans", sans-serif;      /* 默认 Noto 900；得意黑仅在明确选用且已装时使用，二者均 OFL */
+   --font-brush:         "Ma Shan Zheng", "Noto Serif SC", cursive;      /* 马善政毛笔:文旅/传统/人文 主标题·金句 */
+   --font-kai:           "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* 清晰硬笔感章节、引言与人文标题；使用时须符合场景并显式声明 */
+   /* —— 手写体分两档：全部来自官方 OFL 项目，草书只留给大字 hero —— */
+   --font-write:         "Xiaolai", "LXGW WenKai", "Noto Serif SC", cursive; /* 工整清晰：批注、引语与短标题；不承担严肃信息正文 */
+   --font-write-cursive: "Liu Jian Mao Cao", "Long Cang", "Ma Shan Zheng", cursive; /* Google Fonts OFL 草书/行书，只用于大字 */
+   --font-playful:       "ZCOOL KuaiLe", "Noto Sans SC", sans-serif;     /* 站酷快乐体:活泼/消费/儿童/漫画 */
+   --font-round:         "ZCOOL QingKe HuangYou", "ZCOOL KuaiLe", "Noto Sans SC", sans-serif; /* Google Fonts OFL 圆润/趣味展示 */
    --font-jotter:        "Xiaolai", "Zhi Mang Xing", "Long Cang", cursive; /* 清晰手账默认小赖；狂放字体仅作短促点缀 */
    --font-display-serif: "Fraunces", "Noto Serif SC", serif;            /* Fraunces:编辑/杂志展示衬线 */
   --font-grotesque:     "Archivo", "Noto Sans SC", sans-serif;         /* Archivo:现代无衬线展示 */
@@ -79,12 +77,15 @@
   --font-editorial-serif:"Playfair Display", "Noto Serif SC", serif;   /* 时尚、杂志、奢华编辑 */
   --font-classic-serif: "Cormorant Garamond", "Noto Serif SC", serif; /* 文艺、历史、精致拉丁展示 */
   --font-cn-display-serif:"ZCOOL XiaoWei", "Noto Serif SC", serif;    /* 中文人文/文化展示 */
-   --font-hand-en:       "Patrick Hand", "Caveat", cursive;             /* 英文手写(工整):漫画/手账批注,可读 */
-   --font-hand-en-neat:  "Architects Daughter", "Patrick Hand", cursive;/* 英文手写(更工整):建筑师手写体,清楚 */
-   --font-hand-en-casual:"Indie Flower", "Caveat", cursive;            /* 英文手写(随性但清楚):便签/涂鸦感 */
-   --font-hand-en-script:"Dancing Script", "Sacramento", cursive;       /* 英文连笔签名字体:封面签名、短引语 */
-   --font-hand-en-marker:"Kalam", "Shadows Into Light", cursive;        /* 英文马克笔/板书:批注、教学、海报 */
-   --font-mono:          "IBM Plex Mono", monospace;                     /* 等宽:代码/坐标/ID/技术眉签,不是所有数字的默认 */
+   --font-hand-en:       "Patrick Hand", "Caveat", "Noto Sans SC", cursive;             /* 英文手写(工整):漫画/手账批注,可读 */
+   --font-hand-en-neat:  "Architects Daughter", "Patrick Hand", "Noto Sans SC", cursive;/* 英文手写(更工整):建筑师手写体,清楚 */
+   --font-hand-en-casual:"Indie Flower", "Caveat", "Noto Sans SC", cursive;            /* 英文手写(随性但清楚):便签/涂鸦感 */
+   --font-hand-en-script:"Dancing Script", "Sacramento", "Noto Sans SC", cursive;       /* 英文连笔签名字体:封面签名、短引语 */
+   --font-hand-en-marker:"Kalam", "Shadows Into Light", "Noto Sans SC", cursive;        /* 英文马克笔/板书:批注、教学、海报 */
+   /* ★ 拉丁角色的中文兜底(2026-08-11):拉丁展示/等宽/手写体都不含中文字形,中文落进来时
+      浏览器会回退到系统里任意 CJK 字体(worker 上可能是卡通/手写体)→ 卡通字 + 度量漂移溢出。
+      在 generic 关键字前显式钉 Noto,使中文回退确定落到 Noto,创作渲染与交付渲染一致。 */
+   --font-mono:          "IBM Plex Mono", "Noto Sans SC", monospace;     /* 等宽:纯拉丁代码/坐标/ID/编号,中文一律不用;中文兜底 Noto 只防意外落卡通体 */
   --font-display:       var(--font-title);                              /* 封面/hero 大标题;按主题设为 brush/heavy/display-serif 等 */
   --font-number:        var(--font-display);                            /* TODO 数字主声部:按 Style Lock 选 display/grotesque/serif/sans/mono；默认跟随本册展示字体 */
 
@@ -458,7 +459,9 @@ svg.svg-diagram{
 .arch-matrix .quad .q-label{ font-family:var(--font-sans); font-size:var(--fs-caption); color:var(--accent); letter-spacing:var(--tracking-cjk-label); }
 
 /* J. 过渡页 / 章节分隔页设计系统。
-   所有过渡页统一使用 .slide--section 的字体角色、编号语法和内容层级；
+   所有过渡页/章节分隔页统一使用标准的 .slide--section（字体角色、编号语法和内容层级）；
+   ⛔ 不要自造 .slide--divider / .slide--transition 等类——过渡页只用 .slide--section。
+   （计划里的 `dividers` 是负责过渡页的 Slide 页组名，不是 CSS 类。）
    通过 left/right/center 三种同源构图改变重心，不复制死模板，也不每页另起语法。
    用法:<section class="slide slide--cover slide--section">
            <div class="slide-body">
@@ -479,7 +482,7 @@ svg.svg-diagram{
 .slide--section .sec-eyebrow{ font-family:var(--font-sans); font-size:var(--fs-caption); letter-spacing:var(--tracking-cjk-label); text-transform:none; color:var(--ink-dim); }
 .is-latin-label,.is-tech-id{ font-family:var(--font-mono); letter-spacing:var(--tracking-caps); text-transform:uppercase; }
 .is-cjk-label{ font-family:var(--font-sans); letter-spacing:var(--tracking-cjk-label); text-transform:none; }
-.is-expressive-type{ /* Semantic opt-in marker for intentional playful, handwritten, or calligraphic type. */ }
+.is-expressive-type{ /* 语义标记：仅在童趣/漫画/手作/板书/书法等合题场景显式使用 */ }
 /* 章节名:中等展示字号 + 舒适字距(别用 76px+ 紧字距硬压——粗大字挤;标题跟场合,克制场合用宋/黑直立) */
 .slide--section .sec-name{ font-family:var(--font-title); font-weight:800; font-size:60px; line-height:1.2; letter-spacing:.01em; color:var(--ink); max-width:100%; text-wrap:balance; }
 .slide--section .sec-rule{ width:min(480px,100%); height:1px; background:var(--line); border:0; margin:6px 0; align-self:stretch; }

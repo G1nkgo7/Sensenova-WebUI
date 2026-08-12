@@ -13,10 +13,10 @@
 其中 `query` 是 brief,其余字段(lang / slide_count / topic …)整体传给 agent_loop。
 
 用法:
-    uv run python distill.py --seeds ../queryGeneration/seeds/金融与投资.jsonl --batch fin --workers 8
-    uv run python distill.py --seeds seeds.jsonl --batch fin --resume     # 断点续跑
-    uv run python distill.py --seeds seeds.jsonl --batch fin --dry-run     # 不调模型,只看进度条/流程
-    uv run python distill.py --query "做一份 5 页的人工智能简介" --batch adhoc
+    uv run python runtime.py --seeds ../queryGeneration/seeds/金融与投资.jsonl --batch fin --workers 8
+    uv run python runtime.py --seeds seeds.jsonl --batch fin --resume     # 断点续跑
+    uv run python runtime.py --seeds seeds.jsonl --batch fin --dry-run     # 不调模型,只看进度条/流程
+    uv run python runtime.py --query "做一份 5 页的人工智能简介" --batch adhoc
 
 agent_loop / tools 稍后再写。本文件只依赖一个约定好的入口:
     agent_loop.run_sample(sample_id: str, seed: dict, run_dir: str, config: dict) -> dict
@@ -214,7 +214,7 @@ def build_config(args):
     return {
         "batch": args.batch,
         "dry_run": args.dry_run,
-        "model": os.environ.get("MODEL", "claude-opus-4-7"),
+        "model": os.environ.get("MODEL", os.environ.get("SENSENOVA_MODEL_NAME", "deployment-model")),
         "anthropic_base_url": os.environ.get("ANTHROPIC_BASE_URL", "https://tokenhub.sensetime.com"),
         "openai_base_url": os.environ.get("OPENAI_BASE_URL", "https://tokenhub.sensetime.com/v1"),
         "image_model": os.environ.get("IMAGE_MODEL", "gpt-image-2"),

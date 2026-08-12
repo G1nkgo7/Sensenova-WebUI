@@ -1,103 +1,177 @@
-# Quality checklist
+# Quality Checklist (Single Page + Full Deck)
 
-Use this checklist after every render and again before delivery. Automated lint finds candidates; fresh pixels and the DOM determine whether a defect is real.
+The unified criteria for slide quality are divided into three parts:
 
-## 1. Single-page review
+- **Single-Page Check** —— Whether a single page can express clearly, stably, and professionally. This set is used by both **slide subagent self-check** and **review subagent page-by-page review**.
+- **Full-Deck Check** —— Whether the entire deck flows smoothly around the goal and maintains a unified style across multiple pages. This set is used by the **review subagent sweeping the entire deck**.
 
-### Content and expression
+General Priority: **Hard criteria before soft criteria** —— "Hard flaws" (see Single-Page · Dimension 4) that can directly ruin a page must be cleared first, before discussing "soft flaws" such as hierarchy or aesthetics.
 
-- The page has one clear job and one dominant takeaway.
-- Titles state a conclusion or useful question instead of naming a vague topic.
-- Claims, numbers, quotes, names, dates, and sources are accurate.
-- Copy is concise enough for a presentation and contains no placeholders or internal production notes.
-- Repeated labels, decorative metadata, and redundant subtitles are removed.
+Reading Routing: Slide Group should only read "I. Single-Page Check" and the related lint; Review should first read "II. Full-Deck Check", and then use the single-page check and lint to locate issues. Do not treat this document as a pre-production full-text read.
 
-### Visual semantics
+## Table of Contents
 
-- The chosen medium fits the content: imagery for atmosphere or identity, ECharts for quantitative data, Canvas plus HTML labels for large diagrams, and HTML/CSS for ordinary structured text.
-- Every image, chart, and diagram contributes evidence or meaning.
-- Generated or searched imagery matches the planned subject, crop, palette, and intended use.
-- Charts have readable axes, legends, labels, units, and a clear highlighted series.
-- Diagrams expose the intended relationship at a glance and avoid decorative complexity.
+- I. Single-Page Check: Expression and Content Logic, Visual Semantics and Explanatory Power, Layout Organization and Reading Path, Readability and Technical Completeness, Visual Elements and Style Adaptation
+- II. Full-Deck Check: Target Scenario, Full-Text Structure, Visual System Consistency, Composition Density, Basic Aesthetics, Art Direction, Presentation Risks
+- III. Machine-Checkable Lint Items: Anti-slop / technical hard flaws that can be directly scanned by scripts
+- How to Use: Division of labor between slide subagent and review subagent
 
-### Layout and reading path
+---
 
-- The title, body, visual, and footer obey the deck grid and safe margins.
-- The reading order is obvious within three seconds.
-- Repeated units share alignment, spacing, and internal structure.
-- The page has a stable visual center; accidental empty bands and crowded corners are fixed.
-- No text, image, or decoration overlaps, clips, or escapes its intended container.
-- A special cover, divider, hero, or ending page is deliberately different without breaking the deck system.
+## I. Single-Page Check
 
-### Typography and contrast
+A single page must stand on its own: **clear content expression + solid visual support**.
 
-- Body text, captions, chart labels, and diagram labels remain readable at presentation distance.
-- Normal text has at least 4.5:1 contrast; large text has at least 3:1.
-- Text over imagery uses a scrim, backplate, or low-detail placement area.
-- Long titles wrap at semantic boundaries and never leave a one- or two-character orphan.
-- Chinese and Latin type pairings are intentional and all referenced fonts are available to the delivery pipeline.
+### 1. Expression and Content Logic
+- The theme / key point / conclusion is clear; **the title and the body text point to the same expressive goal** (no off-topic content, no mismatch between the two).
+- Supporting information **backs up the page's main thesis** (data / evidence serves the single point this page is trying to make).
+- **Completes the current page-type task + contains mandatory elements** (case study pages must have specific cases, introduction pages must have representative works, data pages must have real / annotated data, solution pages must have specific methods... see the checklist after the page-type vocabulary in SKILL.md). [Note: Page-type names may be Chinese or English roles depending on the deck language (Closing, Case Study, etc.); identify them by **page-type semantics**, and do not miss-evaluate due to literal language differences.]
+- **Text is consistent with the plan**: On-screen text can only come from the page-by-page plan's `## 最终屏显文案`, and must not be rewritten / expanded / fabricated. Planning fields such as `主体/受众/目标/页面角色/制作组/视觉验收/素材路线/来源/文件路径/证据编号/内部状态` are for production use only and must not appear on-screen as-is; when the page theme itself indeed needs to discuss the audience or goal, it should be written as normal body text facing the audience, without displaying field labels. No self-created headers, watermarks, "Confidential · Internal Use", fake dates, fake archive numbers, or redundant decorative text. For ordinary content pages, `.slide-footer` + `.page-no` provided by base.css and permitted by the plan are not considered self-created; cover and closing pages do not display these furniture elements by default.
+- **Supporting text has audience value and is not repetitive**: Themes, work names, chapter numbers, years, and occasions should each appear only once; pseudo-metadata such as `SCENE 00 / COVER`, `END / NN`, `A VISUAL ESSAY`, fictional coordinates/archive numbers, and repetitive page numbers/durations have no actual informational value and must not appear on-screen. Labels that do not damage information or composition when removed should be deleted rather than moved to another corner.
+- **Content is sufficient and screen semantics are unique**: Ordinary content pages must provide irreplaceable value to the audience, and should be further explained by an appropriate layer among evidence, mechanism, comparison, case, action, or boundary; having only a theme sentence, a synonymous subtitle, and a status badge does not constitute valid content. Compare horizontally across titles, kickers / subtitles, image badges, badges, callouts, legends, and footers; a single phrase should usually retain only its strongest carrier. If repetition is indeed required for navigation or on-screen comparison, each occurrence must serve a different function.
+- **Punctuation width (full-width vs. half-width) follows the language (consistent across the entire deck)**: Use full-width punctuation (`，。：；！？「」`) for Chinese paragraphs, and half-width for English; **do not mix Chinese and English punctuation in a single sentence**; exceptions apply to half-width contexts such as numbers / code / dates / percentages / abbreviations. **Scanning half-width `,` `.` `:` `;` immediately following Chinese characters = fail** (e.g., `间,` `来源:` `径;`).
+- The content itself has no logical issues (no self-contradictions in causality / sequence / categorization). **Factual accuracy**: Every on-screen fact must be traceable to the reference materials in the corresponding page's `speech.md`, or be marked as "schematic / pending verification"; no obvious errors regarding specific people / works (gender / title / ownership). [Note: The **sole gatekeeper for accuracy is the orchestrator** —— the pipeline of Material / Research → `plan/grounded-knowledge.md` → page-by-page plan; slide/review will not re-research, so the orchestrator must check each item against the single source-of-truth knowledge draft when transcribing.]
+- **Production sources do not appear on ordinary pages**: Paths like `research` / `materials` / `grounded-knowledge` / `plan`, evidence numbers, and internal URLs must not appear in ordinary page text. Real external sources are written by default into the page-by-page plan's `## 来源`, and aggregated by scripts into the "do not read aloud" section of `speech.md`; when the user or delivery scenario explicitly requires on-screen references, an independent references page can be used, presented as standard citations facing the audience, without leaking internal paths or production labels. Schematic data should still be marked as "schematic / self-drafted" on the page itself.
 
-### Technical checks
+### 2. Visual Semantics and Explanatory Power
+- **First, compare against the "visual acceptance" of the page-by-page plan**: Without looking at HTML comments and speaker notes, looking only at the final pixels, can the audience retell the objects, relationships, directions, and conclusions required by the plan? If it is technically complete but cannot answer this question, it is still a fail.
+- **Semantic consistency**: The title, subtitle, legend, node labels, arrow directions, and conclusions must use the same set of objects and relationships. You cannot have the title say A→B, the legend write B—sample, and the diagram have no direction; code comments must not be used to explain away contradictions in pixels.
+- **Readable relationship encoding**: Lines expressing flow, causality, transfer, feedback, or time must have clear endpoints and directions; use arrows or equivalent explicit encoding when direction is needed. Arrowless dashed lines, curved lines, and scattered line segments are merely decorative if they cannot be explained, and do not count as infographics.
+- **Domain characteristics are sufficiently specific**: Science/technology/medical/industrial/methodology pages must present recognizable objects or outputs of that domain, such as real/faithfully simplified spectra, micrographs, CT cross-sections, samples, instrument statuses, or test results. Generic geometries like circles, rectangles, and hexagons are valid only when they map clearly and are indeed suitable for the abstraction level; they cannot substitute for domain evidence.
+- **Explanation meets the page's responsibility**: If a page is to compare six methods, the visuals must at least help the audience distinguish what they measure, what they apply to, or what evidence they produce; merely listing names accompanied by a generalized placeholder of "object—instrument—data" does not count as a completed explanation.
+- **Visual footprint is proportional to information weight**: Main diagrams, charts, or mechanism diagrams must use the primary area allocated by the plan, and not be shrunk into a narrow middle strip; blank space in large panels must carry grouping, direction, contrast, or breathing room, rather than representing an unfinished area. Border area does not equal content footprint: even if cards/sidebars fill the page, if the effective content is only pasted along the top and bottom edges while the middle remains vacant for a long time, it is still an incomplete composition. Prioritize using relevant images, interfaces, charts, or explanatory visuals, or shrink/reorganize containers; do not rely on random icons and decorations to fill gaps.
+- **Open-ended retelling test**: Vision should first answer "What do you read from this diagram, what is the direction, and which elements are domain evidence?" and then compare it with the plan; do not just ask yes/no questions like "Is it beautiful / does it overflow?".
 
-- The page renders at the required canvas size with no console error.
-- `render.py` reports zero `CJK-TYPE` defects: no mixed-family Chinese sentence, accidental mono/wide tracking, or unmarked novelty CJK font.
-- All local assets resolve and no external placeholder URL remains.
-- The rendered PNG is fresh and corresponds to the current HTML.
-- Browser-only effects degrade safely in headless Chromium.
-- A page transition, if present, does not hide or distort the final state.
+### 3. Layout Organization and Reading Path
+- Has a **clear visual focal point**, with distinct primary and secondary hierarchies (knowing where to look first at a glance).
+- Layout is stable and aesthetic (balanced alignment, grid, and whitespace; neither cramped nor empty).
+- **Smooth viewing order** (natural flow of gaze, no jumping around).
+- Decorations **do not interfere with reading** (textures / shapes / icons are auxiliary and do not steal attention from the content).
 
-## 2. Full-deck review
+### 4. Readability and Technical Completeness
+- Key information is clearly readable (font size is large enough, contrast is sufficient, not overlaid/obscured).
+- **Minimum font size ≥ `--fs-min`** (readable in projection scenarios); text is not shrunk to the point of illegibility just to squeeze in content.
+- Expressive elements are **fully presented** and their main meaning can be read (charts have axes / legends / labels, not cut in half).
+- Export quality is clear and stable (not blurry, not cut in half).
+- The screen has no defects.
 
-### Narrative
+> **Hard flaws in this dimension must be cleared first, but the detector only provides candidates, not aesthetic judgments.** Look at the fresh PNG without warning phrasing first, then use DOM / bbox to locate. If `OVERFLOW`, `CROWDED`, `FOOTER-PUSHED`, `BROKEN-IMAGE`, etc., prove that content is actually cropped, pushed off the canvas, or missing, it is a hard flaw; `BOXOVERFLOW`, `OVERLAP`, `DECOR-OVERLAP`, `FOOTER-COVER`, `INNER-GAP`, `WIDOW-LINE`, `IMG-LONELY`, `COVER-OOB`, `SVG-SMALL`, etc., are diagnostic clues, and should only be fixed when final pixels or DOM prove there is indeed occlusion, unreadability, emptiness, or semantic loss. The bbox contains transparent line boxes and cannot independently prove glyph occlusion; do not delete beautiful quotation marks, add white backing boards, compress main visuals, or create isolated punctuation just to "eliminate warnings". Full-bleed background `.slide--bleed` to the edge is compliant.
+> ② Occlusion (text / charts / images / shapes overlapping each other), especially footers/page numbers being covered by background images or decorations;
+> ③ Placeholder residue (empty boxes, placeholder text, half-cut charts missing axes / legends / labels);
+> ④ Broken images/charts (`<img>` or ECharts not actually rendering);
+> ⑤ Chinese "tofu blocks" (□□□, font not loaded);
+> ⑥ Insufficient readability (text contrast is too low to see clearly);
+> ⑦ Conceptual diagram hard flaws: large schematic diagrams shrunk into isolated small blocks / narrow strips, labels colliding / touching lines / being pressed by connecting lines. New pages default to using Canvas/images + HTML labels; large hand-written SVGs represent an incorrect choice of medium. For old pages, `SVG-SMALL` / `SVG-LABEL-OVERLAP` should first be confirmed by final pixels to see if they are indeed unreadable, before fixing the medium or geometric root cause;
+> ⑧ Out-of-bounds coloring (red / pink / green outside the palette, default ECharts colors, multiple series not using `--series-*` tokens, rises and falls relying solely on hue without ↑↓/positive-negative signs, or rise color = warning color) —— always switch back to base.css tokens + dual-channel.
+### 5. Visual Elements and Style Adaptation
+- All elements must be **coordinated** (consistent color scheme, typography, and graphic language).
+- Clear hierarchy must exist between elements; **visuals must serve the content focus** (emphasizing key information, not decoration).
+- The visual style must **align with the selected style, color palette, and primary color of the deck** (see base.css and plan/deck.md).
+- **Accurate asset usage**: No redundant assets (every image must carry content); subjects must not be severely cropped or ruined, stretched, or distorted, and aspect ratios must match their slots (if they do not match, use `contain` or adjust the slots instead of heavy cropping). Check the focal point and `protected_parts` page-by-page using `crop_contract`: parts that carry identification or evidence—such as faces/tops of heads/gestures, complete product outlines/logos, the main subject of an artwork, coordinate axes/legends—must not be missing; background edges may only be intentionally cropped when permitted by the contract. Transparent subject elements must have real Alpha channels, with no remaining checkerboards, solid white backgrounds, obvious white borders/aliasing, or accidentally deleted hair, limbs, and product edges.
+- **Seamless image backdrops**: Scrims/overlays must not leave obvious rectangular edges, black bands, or unnatural horizontal lines on images. Corner backdrops should fade out radially or only support the text, rather than disguising limited black blocks as "hierarchy."
+- **No regression in special page modifications**: Backing plates, color bands, or chapter meta-information are acceptable if they have served a clear partitioning, pacing, or narrative role since the first draft; if they are added temporarily just for local contrast, the before and after states must be compared. If local text becomes clearer but causes the main image to be cut off, visual furniture to become heavier, or the center of gravity and reading path to deteriorate, this constitutes a regression and must be rolled back or changed to a more localized treatment.
+- No **low-quality** effects (cheap **themeless** gradients, abuse of shadows/frosted glass, or generic AI-style templates; gradients with a thematic color story are excluded).
+- **Confident hierarchy**: Headings must be significantly larger than body text (headings ≥ ~2.1× body text, subheadings ≥ ~1.45× body text). On dense pages, headings, body text, and labels must **not be crowded into the same font size tier**; the viewer must be able to tell at a glance what to look at first.
+- **Primary and secondary emphasis**: Accent points must be placed on the **few spots that truly need to shout** (not coloring all heading lines, eyebrow tags, bullet points, or numbers); a single accent or a primary + secondary dual accent is determined by design decisions; body text, dividers, and labels should use shades of neutral ink.
+- **Do not use AI default colors**: The primary color must come from the theme, not by casually applying default tech colors like "dark navy + neon cyan/electric blue" or `#6366f1` indigo (unless explicitly declared as required by the theme); dark backgrounds must have color temperature, and accents must not be glaring (desaturate them).
+- **Panels with volume**: Cards/panels must be layered by tone (page background → panel → inner elements, a three-level hierarchy), rather than being flat dark boxes; there must be no generic radial "glow" behind headings acting as fake depth of field.
+- **Alignment**: Text blocks on the same page must **align to the same grid line**, without mixing "centered blocks + left-aligned blocks"; line breaks in long headings or long sentences must not create messy, uneven rags. **Element blocks must also align with each other** (edges of adjacent cards/panels/sections and internal row slots must align to the same grid), rather than each block floating independently.
+- **Same style for same weight**: Information of the same hierarchy or importance (parallel subheadings, parallel data items, similar labels/serial numbers) must use the same color, font, font size, and numbering style; changing styles is only permitted to express differences in emphasis, and **changes in color or size must be linked to the meaning of the content**, rather than illogically having this block blue and that block orange.
+- **Restraint in color blocks & decorations**: Color changes must be logical, and similar blocks must share color roles; illogical multi-colored blocks competing equally for attention is the real issue, and rejection should not be judged solely by the number of blocks. For **restrained/rigorous decks**, additionally check whether font roles are stable and whether decorations bear informational or compositional responsibilities; rigor relies on order, whitespace, and hierarchy, not on meaningless stamps, badges, or motifs.
+- **Consistent heading anchors across pages**: The position, font size, and font of `.slide-title` on this page must be consistent with other content pages (not enlarged, displaced, or pushed up by line breaks); bilingual English subheadings must follow the "all or nothing" rule.
+- **Numbers + Units**: Units for large numbers (billion, %, USD, ×) must be **one size smaller and stepped back** (≈0.5× the number size, not stealing the spotlight), rather than being the same size as the number and crammed against it; units, precision, and thousands separators within the same metric family must be written consistently.
+- **Alignment of card rows**: Cards in the same row must be of **equal height, and their internal rows (numbers/headings/body text/footnotes) must fall on the same baseline**, rather than some cards being shorter or footnotes being uneven.
+- **No excessive whitespace inside cards** (see design-rules §9⑩⑰): The content volume of a card/box must match its height, avoiding "one card crammed, one card half-empty." For sparse cards, prioritize reducing height; when cards in the same group must be of equal height and contain only an icon, a heading, and a single line of description, the entire content group must be vertically centered within the card while keeping the text left-aligned. Horizontal centering is only suitable for cards containing a single number or an extremely short status. The divider between "body text ↔ footnote" inside a card should only be drawn when there is a real partition; do not let the line hang in the air. **Do not use `margin-top:auto` to split a middle gap in equal-height cards** (`⚠ INNER-GAP`), and do not use `repeat(N,1fr)` to force unequal amounts of text, causing overflow (`⚠ TEXT-OVERFLOW-BOX`).
+- **No unnecessary line breaks / orphan words** (see design-rules §9⑪): Phrases that can fit on a single line must not be manually broken by `<br>`; the last line must not contain 1–2 orphan words (e.g., "full," "act," "risk" pushed to the next line); containers must not be so narrow that they force a single sentence into multiple lines with orphan words.
+- **No crowded main headings** (see design-rules §9⑫): When heavy fonts like bold Songti or Deyiblack are used for main headings, the heading must fit comfortably on a single line with room to breathe; if the heading is too long, the font size must be reduced rather than forcing a screen full of heavy characters; heavy Chinese characters must not have overlapping negative letter-spacing.
+- **Serial numbers / large text aligned with the top of the heading on the right** (see design-rules §9⑯): Large serial numbers (01/02...) must be **aligned at the top** with the smaller heading on the right, rather than the top of the serial number being lower than the top of the heading (the root cause of misalignment = using `align-items:baseline` or serial number `line-height:1`); this rule must also be followed when rewriting arch-index inline on a page, do not blindly copy the baseline.
+- **No top-heavy center of gravity for covers / text blocks** (see design-rules §9⑭): Text blocks on covers, hero pages, or transition pages must be visually centered or placed in an intentional compositional position, rather than sticking the heading to the top and leaving a large, unjustified blank space below.
+- **Transition pages must be concise but not empty shells**: The chapter number, heading, and a single-sentence promise must form a clear primary information cluster; at least one element—such as an image, thematic motif, color field, crop, or oversized typography—must serve as a visual counterweight. Whitespace must be interpretable as focus, direction, depth, or scene transition, rather than just leftover canvas where text failed to cover. Do not use filler body text cards to fake substance.
 
-- The opening establishes context and promise.
-- Sections progress logically; every page earns its place.
-- Dense analysis alternates with breathing or anchor pages where appropriate.
-- The ending resolves the story instead of merely repeating the agenda.
+---
 
-### System consistency
+## II. Full Deck Review
 
-- The deck uses one resolved visual system: palette, typography, grid, image treatment, line language, and footer behavior.
-- Repeated page roles are related but not mechanically cloned.
-- Page titles share a stable anchor and hierarchy.
-- Visual motifs recur as meaningful variants, not stickers.
-- Sources and speaker notes map to the correct pages.
+The entire deck must be able to **flow smoothly around the objective**, and the **style must be consistent across multiple pages**.
 
-### Production integrity
+### 1. Target Scenario
+- Must fit the **reporting scenario / presentation target** (matching the audience, medium, and level of formality).
+- Must have `plan/design-brief.md`, and the design contract must clearly state the **audience / occasion / material texture / visual medium / reference usage / forbidden zones**; the final product must show that these decisions have been executed.
 
-- Every planned page has current HTML and PNG output.
-- `speech.md`, `present.html`, and asset manifests match the final page count and order.
-- Every review issue is either fixed or explicitly accepted with a reason.
-- Final delivery contains only required files and portable dependencies.
-- Fonts included in the package are limited to the families and glyphs needed by this deck when subsetting is available.
+### 2. Overall Structure and Page-to-Page Progression
+- The overall structure must be **clear, complete, and effective** (Cover → Context/Setup → Argumentation → Summary/Action → **Closing Page (Back Cover, mandatory)**, forming a complete narrative arc).
+- Adjacent pages must **transition naturally** (no gaps, no repetition, no abrupt jumps).
+- **Long decks must have a clear act structure**: The number of chapters and transition pages must be determined by narrative complexity, not mechanically split to meet a fixed count; transition pages should only be used when a genuine shift in theme, evidence, or pacing occurs. `dividers` must share font roles, chapter marking syntax, heading anchors, color/image treatments, and motifs, but each chapter must have a different `chapter_state`, compositional center of gravity, cropping, and visual action; the ending of `bookends` must explicitly echo the cover. They must neither look like different decks nor simply copy the same template while changing only the chapter names.
+- **Must be a "build-up," not a "checklist"**: There must be a single overarching thesis that every page ties back to (not just changing metrics on each page to repeat "it is very large"); no two pages should discuss the same macro point without being merged.
+- **Pacing in density**: No mechanical consecutive sequencing of fully dense pages or minimalist pages without justification; a page must be organized around a single primary judgment, and the amount of supporting information must serve the content and scenario, rather than thinning out complex arguments to fit a fixed number of items.
+- **No mechanical copying of chapter scripts**: Different chapters can share design DNA, but they must not simply copy the exact same "pain points — before case — after case — steps — tools" template and replace the subject names; if similar cases do not have independent incremental value when split, they should be merged into an effective comparison, or separately take on different tasks such as diagnosis, evidence, and action.
 
-## 3. Automated lint interpretation
+### 3. Visual System Consistency
+- Page elements must **remain consistent across multiple pages** (using the same set of tokens for color scheme, typography, headers/footers, page numbers, and spacing).
+- **Canvas family continuity**: Ordinary content pages must share the same basic light/dark, color temperature, and texture family; chapter differences should primarily reside in local color fields, image color grading, bands, or motifs. Full-page transitions must show a clear entry and exit progression across "last page of previous chapter → divider → first two pages of new chapter → chapter exit page," rather than suddenly introducing several pages of what looks like a different deck before switching back.
+- **Consistent fixed framework across the entire deck**: Heading positions, footers, page numbers, and safe margins must use the same base.css skeleton, with no page-by-page drifting (headings suddenly changing size, decorative lines moving randomly, or the center of gravity shifting up and down).
+- **Unified visual recipe for assets** (same medium + same color grading/treatment, no wild style or color shifts): Icons, images, charts, and shapes must use the **same visual language**; do not **mix** flat + 3D + hand-drawn + photographic textures—one deck must have one asset tone. Background images must not use low-quality assets (noise, low resolution, stretching/distortion, or external watermarks).
+- **Image opportunities must be realized**: Pages where `image_opportunity_map` specifies real or generated images must have local assets actually rendered on screen, and the images must serve roles of evidence, identification, scenario, or emotion; you must not write images in the plan but silently regress to pure text/small icons in the final draft, nor shrink the main visual into a symbolic thumbnail in the corner. When a page centers on named real people, creators, or teams, check whether verifiable real portraits, activity photos, or team photos are used, or document the explicit downgrade reason if retrieval failed; "avoiding the generation of fake real people" is not a valid reason for having no images.
+- **Stable expression for similar page types** (all data pages share one tone, all comparison pages share one structure).
+- **Relative balance of visual complexity, information density, and design precision** between pages (no sudden shifts between complex and simple, or refined and crude).
+- No individual pages of obviously low quality dragging down the rest.
 
-Treat these as hard defects when confirmed by fresh pixels or DOM evidence:
+### 4. Layout Fill Rate / Compositional Density
+- **Criteria for spatial completeness**: A page that is technically clean but has its main subject shrunk into a small local cluster, with the remaining space serving no role of focus, counterweight, direction, or breathing room, is still an incomplete composition. Every ordinary content page should have an identifiable primary visual carrier: a real/generated image, a chart, an explanatory Canvas, or a typographic key visual that truly stands on its own through scale, hierarchy, and composition; empty boxes, miniature icons, decorative lines, and pure panels cannot masquerade as such. `SPARSE` only prompts checking spatial ownership and must not automatically add elements based on a fixed fill rate; whitespace with clear Hero, breathing, or asymmetric intent must be preserved. Additional visual elements must still form a single picture with clear primary and secondary focus, rather than being evenly scattered.
+- **Low-item pages (tables of contents / 3-item pages) must be filled out**: Do not rely on `justify-content:center` to center a small amount of content while leaving large empty bands at the top and bottom; enlarge the font scale of headings/serial numbers, turn items into numbered blocks that fill the vertical space, and add anchoring visuals. If there are truly only 2–3 items → merge light pages or upgrade each item (add explanations, data, or graphic elements).
+- **No inline leader gaps allowed**: Leaving a 1fr segment empty in `auto 1fr auto` (heading on the left + English on the right), resulting in a large empty middle section = Fail. Add leader lines/dots to connect the left and right sides, bring them closer, or have content fully occupy the column.
+- **Purely decorative English must not overshadow the main content**: Decorative English like "CONCEPT" or "ACTION" occupying prominent positions and pushing real information ("what it is / what to do") to the edges = inverted hierarchy, Fail. Real information must be closer and heavier; decorative English must be weakened or removed.
 
-- `BROKEN-IMAGE`
-- real `OVERFLOW` or `TEXT-OVERFLOW-BOX`
-- real `FOOTER-PUSHED` or `FOOTER-COVER`
-- missing slide files, stale renders, console errors, or a page-count mismatch
+### 5. Overall Aesthetic Tone (The "Aesthetic Appeal / Harmony" Axis)
+- **Backgrounds must not be ugly or off-key**: Full-bleed atmospheric images that are busy, low-contrast, muddy, or off-key = Fail. A clean, solid background is preferred. **Use a single background recipe for the entire deck**; do not generate different images for each page, which causes **different layout types to drift wildly**.
+- **Contrast / Color scheme discipline (applies down to decorative elements)**: Rings, lines, English text, and motifs must also have sufficient contrast—maroon stacked on near-black that is unreadable, or low-contrast gold = Fail. The number of color blocks and accents is determined by the information hierarchy, but every single color must have a role and must not compete equally for attention; **no themeless glow or radial gradient fake depth of field is allowed**.
+- **Solemn themes must not look like keynotes**: Using near-black dark backgrounds + slanted large text + dramatic atmospheric images for party/government, public administration, or academic presentations = incorrect tone (see `design-rules.md` §1 Party/Government clause / §2 Typography clause). Switch to **upright serif (Source Han Serif) + restrained red/gold + clean background**.
 
-Treat these as review candidates rather than automatic failures:
+### 6. Art Direction and Anti-Template Review
+- The entire deck must form a **consistent visual temperament** (looking like a complete set made by one person, not a patchwork).
+- The visual language must **match the theme and medium**.
+- **Must have a design concept, not template-filling**: The deck must show a **theme-appropriate design concept / color story** (written in `plan/design-brief.md` and `plan/deck.md`), rather than being a "color-swapped generic AI deck."
+- **Signature visuals must be realized**: `visual_thesis / signature_visual` must not merely remain in the Style Lock text; the planned landing pages must actually feature the corresponding composition, medium, or motif action, becoming recognizable memory points. If it can only be read from the brief but is invisible in the PNG, classify it as must_fix; it is permissible to honestly narrow the definition based on the actual final product, but using ordinary backgrounds or minor decorations to fake it is prohibited.
+- **References must be translated**: Typography, layout, colors, and motifs must feel as though they grew out of the materials, audience, and occasion of this specific case, rather than copying the complete recipe of `design-styles.md` or the prototype of `layout-patterns.md` verbatim. If it looks at a glance like a reskinned generic recipe, classify it as should_fix.
+- **Layout must not be monotonous**: **Do not have every page follow the "eyebrow tag → main heading → row of cards" pattern**. Equal-weight cards/grids should only be used when information is truly parallel and benefits from scanning; once adjacent pages or an entire chapter fall into mechanical repetition, switch to image-text, process flows, comparisons, key visuals, or data compositions, rather than judging by a fixed page quota.
+- **Must have visual peaks**: At true narrative peaks, use oversized numbers/words, full-bleed golden quotes, key images, charts, or other actions suited to the theme to break up the pacing; restrained short decks can use mechanism diagrams or conclusion comparisons to form peaks, rather than forcing a hero page just to meet a quantity requirement.
+- **Motif thread**: The cover motif must be echoed in variations on key pages sufficient to establish kinship; do not use it only once and discard it, nor mechanically paste decorations just to meet a recurrence count.
+- **Charts must be journalistic**: Data page headings must state the **conclusion** (finding sentence) rather than the topic; charts must label values directly and cut redundant axes/legends; only one KPI in a row should act as the headline.
+### 7. Overall Presentation Risks
+- No **large number of pages repeatedly exhibiting the same type of issue** (systemic recurrence of the same flaw → usually rooted in base.css or the planning layer; the design system should be modified rather than fixing page-by-page).
+- No **missing pages / duplicate pages / sequence errors / mismatch between section titles and content**.
+- **The final page must be a "Closing Page" (back-cover style closure), and its layout must be distinctly different from the preceding page (Summary / Call to Action)** (it must not be just another content page); it must not contain any closing platitudes such as "Thank you for listening / reading / watching" (forbidden in both Chinese and English, hard constraint).
 
-- `OVERLAP` and `DECOR-OVERLAP`
-- `INNER-GAP`, `WIDOW-LINE`, and `IMG-LONELY`
-- `VBALANCE` and `COVER-OOB`
-- `cjkTypography`, crowdedness, bbox/contrast candidates, mild wrapping, punctuation, and aesthetic preferences
-- transparent bounding-box collisions and intentional layered compositions
+---
 
-Never damage a good composition merely to silence a heuristic. Verify the actual pixels, identify the root cause, and make the smallest correction that improves the audience-facing result.
+## III. Machine-Checkable Lint Items
 
-## 4. Final acceptance
+These criteria can be directly counted, regex-checked, or calculated from tokens, without relying on aesthetics—both slide self-checks and review audits can mechanically run through them. Check them off item by item:
 
-The deck is ready only when all of the following are true:
+- [ ] **Emphasis has hierarchy (not colored everywhere)**: accent (primary + optional secondary) is used only in the few places that truly need to be shouted, with a clear hierarchy, rather than coloring every title line / eyebrow tag / KPI / bar chart column (which is "emphasizing everywhere = no focus"); whether to use a single color or dual accents is a design decision and does not have a hard-coded limit on frequency (see `design-rules.md` §1).
+- [ ] **Color tokens (raw-hex)**: If bare `#rrggbb` repeatedly appears outside of `:root` (the base.css token block), check whether page-level color drift has occurred; colors belonging to the deck-wide functional roles should be consolidated back into `var()`, while truly local and semantically derived colors can be retained, and will not be failed based on a fixed count.
+- [ ] **Zero hits on P0 anti-slop** (for the precise list, see `design-rules.md` §11 "Precise Anti-Slop List"): Do not use the 7 indigo/purple hexes (`#6366f1`/`#4f46e5`/`#4338ca`/`#3730a3`/`#8b5cf6`/`#7c3aed`/`#a855f7`) as **convenient default** accents (unless intentionally declared by the theme); no **themeless** generic trust gradients (purple→blue / blue→cyan / indigo→pink; gradients with a themed color story do not count as hits); no emoji icons (✨🚀🎯⚡🔥💡📈🎨...); no fabricated metrics ("10× faster"/"99.9% uptime"/"3× more"); no fillers (`lorem ipsum`/`feature one·two·three`/`placeholder text`); no rounded cards + left-side colored bar accents; no external placeholder image CDNs (unsplash / placehold.co / picsum...).
+- [ ] **Uppercase letter-spacing (all-caps-no-tracking)**: Every `text-transform:uppercase` (including inline `style=`) must carry `letter-spacing≥0.06em` (0.08em recommended). All-caps without letter-spacing is the number one amateur tell. [Do not use `uppercase` for Chinese.]
+- [ ] **Display negative letter-spacing**: Large titles in `≥48px` must carry `letter-spacing:-0.02em~-0.03em` (loose large text also looks amateurish; this applies to Latin scripts, Chinese large titles should not be excessively tightened).
+- [ ] **Chinese font semantics (cjk-typography)**: Within the same title, conclusion, button, or label sentence, prioritize using a single font family; emphasized words should prioritize changing only color/font-weight/font-size/text-decoration; cartoon, handwritten, or calligraphic fonts should only be used in contextually appropriate scenarios and when explicitly marked; all Chinese font stacks must retain Noto Sans/Serif SC as a fallback. `cjkTypography` in `render.py` is an advisory clue and does not require mechanical zeroing; delivery is blocked only when fresh pixels or DOM prove missing characters, unreadability, actual clipping/obstruction, or obvious semantic role errors.
+- [ ] **Contrast gate (contrast-gate)**: Body text to background **≥4.5:1**, large text (>18px or 14px bold) **≥3:1** (WCAG ratios can be calculated from token color values parsed from `base.css`, or compared by color-picking on rendered images). If sub-standard, change the text usage to one level darker (600 level).
+- [ ] **Each slide has a clear lightness role + light-dark rhythm (slide-theme / slide-rhythm)**: Each page must align with one of the declared states, such as "regular content background / darkened transition background / full-bleed hero", with a unified style across the entire deck. Rhythm changes serve chapters and narrative high points, rather than randomly changing backgrounds just to break consecutive counts; when a long sequence of pages shows no change in visual state and causes reading fatigue, use lightness variations within the same color family, images, or color field states to establish transitions.
+- [ ] **Layout contract (layout-contract)**: directly under root, use only standard `.slide-title` / `.slide-body` / `.slide-footer`, and keep body content in the `.slide-body` grid/flow. `render.py ⚠ CUSTOM-BODY` / `⚠ ABS-LAYOUT` are **advisory diagnostics, not a hard gate**: treat them as a fix-required flaw only when fresh pixels confirm real clipping, occlusion, bottom overflow, or unreadability; if the pixels show intact composition (absolutely-positioned decor/scrim, or a custom body structure that does not hurt reading), record a checker mismatch and keep it rather than breaking structure to zero the warning. The only hard blockers are `broken` / `overflow` and real occlusion.
+- [ ] **Overlap guard (layout-guard)**: `DECOR-OVERLAP` / `FOOTER-COVER` candidates have been cross-checked item-by-item against fresh pixels; actual overlaps must be zero. Bounding box false positives with no visible overlap should be logged as checker mismatch, and composition must not be broken just to zero out the report.
+- [ ] **Diagram medium (diagram-medium)**: Large flow / architecture / mechanism diagrams must use Canvas geometry + HTML tags, or textless images + HTML annotations; SVG is used only for icons/logos/arrows/small decorations. If legacy pages retain large SVGs, acceptance is based on confirming that labels, directions, and main bodies are actually readable in the final pixels, rather than the number of warnings.
+- [ ] **Text box overflow / empty space inside cards (box-fit, see §9⑩⑰)**: `render.py ⚠ TEXT-OVERFLOW-BOX` (text pushing out of panels/cards/body area) / `⚠ INNER-GAP` (large empty space in the middle of a card) must be zero; equal-split grids (`repeat(N,1fr)`) carrying unequal amounts of text should be changed to `auto` + top-aligned, remove unnecessary `margin-top:auto`, do not hardcode `height:XXXpx` on multi-zone stacked pages, and use `clamp()` / downscale by character count for giant cover font sizes so they do not push out of the safe zone.
+- [ ] **Footer overflow (footer-fit, see §9⑦⑪, most severe)**: `render.py ⚠ FOOTER-PUSHED` must be zero—the volume of body content must absolutely never push the footer down / overlap the top of the footer / squeeze it out of the viewport; if it does not fit, reduce text / split into two pages / switch to a compact layout, change fixed-height zones to `minmax(0,1fr)`, and adhere to `--body-safe-bottom`.
+- [ ] **Orphan text / orphan images (orphan, see §9⑦⑱ / §6)**: `render.py ⚠ WIDOW-LINE` (1-2 isolated words on the last line) / `⚠ IMG-LONELY` (isolated small bitmap images) should ideally be zero; widen text blocks / remove redundant max-width to eliminate orphan text, and enlarge bitmaps / align to grid / add captions / group them to eliminate orphan images.
+- [ ] **Cover out-of-bounds + completeness (cover, see §9⑦⑰ / §6)**: `⚠ COVER-OOB` must be zero (titles must adhere to `--margin-x/y` safe margins, do not pile them in the top-left corner); the key visual and the title must form a single clear focus, with necessary subtitles / real identity information / semantic motifs being minimal and precise. Covers do not rely on a fixed number of "design layers", pseudo-metadata, duplicate tags, footers, or page numbers to prove completeness.
+- [ ] **Non-monotonous illustration shapes (shape, see §6)**: Illustrations should not unconsciously consist entirely of same-sized right-angled squares; choose appropriate shapes, borders, or crops based on the tone and form a cohesive series. The number of shapes should serve the composition and theme, and the main subject must not be erroneously cropped.
+- [ ] **Alignment + structured spacing (align, see §9⑯⑱ / `⚠ VBALANCE`)**: Elements on the same page must share alignment axes (shared left line / top alignment / baseline / right-aligned numbers), spacing must follow the `--space-*` scale and be equidistant for the same hierarchy, and the center of gravity must be centered or fully fill the safe area; squinting should reveal no awkwardness like "crooked / empty gap / uneven".
 
-- content fidelity: pass
-- final pixels inspected: yes
-- critical visual defects: none
-- page count and order: correct
-- speaker notes and sources: synchronized
-- `present.html`: built and playable
-- delivery package: portable
+[Under single-background mode, "rhythm" = using lightness / density variations within the same mode to create contrast, rather than jumping back and forth between light and dark backgrounds.]
+
+---
+
+## How to Use (Role-by-Role Reference)
+
+- **Slide Group** (`subagents/slide.md`): Completed serially in page order by the same Agent following "single-page first draft → single-page rendering → single-page Vision → necessary fix re-verification"; the next page is entered only after the current page is ready. At the end of the group, use batch rendering of the entire group to check affinity and variation. The group-end overview cannot replace single-page pixel self-checks for any responsible page.
+- **review subagent** (`subagents/review.md`): Covers all pages through a full-deck overview + adaptive grouped contact sheets, passing both "single-page checks" and "full-deck checks" simultaneously; establishes a single issue ledger, directly merges and fixes visual issues, re-renders changed pages, and uses the re-verification contact sheet to inspect new pixels. A single Review does not repeatedly clear warnings; only after evidenced critical flaws are handed back to the original page group is a new Review re-verification permitted, with the task capped at a maximum of 3 times in total.
+- **Orchestrator**: During the planning phase, use "single-page check: expression and content logic" and "full-deck check: overall structure" to self-check narrative and content (blocking issues during planning is cheaper than reworking after rendering); after a Review is blocked, only re-dispatch to the original page group based on evidence, with a maximum of 2 re-works. Once the budget is reached, restore the last verified version and deliver a usable final draft with warnings, rather than judging advisory or closing text issues as a total failure of the entire item.

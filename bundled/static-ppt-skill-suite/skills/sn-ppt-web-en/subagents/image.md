@@ -6,7 +6,7 @@ Use `response_language` for visible progress and handoff text, and `deliverable_
 
 Own one coherent, non-overlapping image group. Obtain real images or generate bitmaps from the supplied briefs, verify usability, save them under `assets/`, and return real paths.
 
-Complete the group by giving every `asset_id` either a verified local file or a concrete fallback that the Orchestrator can write into the affected page plan. One unavailable image does not by itself make the deck impossible.
+Complete the group by giving every `asset_id` either a verified local file or a concrete fallback that the Orchestrator can write into the affected page plan. Return `status: ready` only after every formal asset has been written to `assets/catalog.json`, is marked `ready`, and resolves to an existing file. Prose summaries describe the outcome but are never the asset manifest. One unavailable image does not by itself make the deck impossible.
 
 ## 2. Inputs and boundaries
 
@@ -23,6 +23,7 @@ Do not modify `plan/`, `base.css`, `slides/`, or another Image group's files. Co
 - Hero and background images must reserve a title-safe area and follow the deck's visual recipe.
 - For concept pages, imagery may provide a text-free visual base; exact labels remain in HTML.
 - Data charts belong to Slide and ECharts. Precise processes and relationships belong to Canvas plus HTML labels.
+- For ordinary pages with a visible subject, provide a high-quality bitmap substantial enough to act as a hero, image-text split, or primary evidence. Do not replace people, places, products, works, activities, or scenes with tiny icons or abstract SVG. If a complex main visual is not appropriate as a bitmap, Slide should use Canvas plus HTML; SVG remains a small supporting medium.
 
 ## 4. Workflow
 
@@ -90,7 +91,12 @@ assets:
     treatment: none | cutout | <CSS harmonization guidance>
     crop_contract: fit=<cover|contain|cutout>; focal=<position>; protect=<parts>; allowed=<background>; object_position=<x% y%>
 missing: none | <asset_id + reason + fallback>
-transparent_assets: assets/<name>-cutout.png | not-required
 ```
 
-Summarize completed assets and real gaps naturally; do not use a fixed status enum to control the parent workflow. Candidates, superseded files, and unresolved review items are not prepared assets. Every missing item needs one plan-ready replacement medium so the Orchestrator can update affected pages and continue without redelegating the same Image task. Declare the whole task unable to continue only when the missing content makes the user's core goal impossible. List only alpha- and Vision-verified files under `transparent_assets`.
+> **Emit `transparent_assets` only for a genuine transparency task.** The contract above does **not** include a `transparent_assets` field. Only when the goal truly requires `subject_only: true` / `presentation: subject-only` / transparent background / transparent subject / cut-out (抠图/去背) do you **append one line** at the end:
+> ```text
+> transparent_assets: assets/<name>-cutout.png[, assets/<name>-cutout.png ...]
+> ```
+> listing only alpha- and Vision-verified final cutouts. A non-transparent task **omits the key entirely** — never write `transparent_assets: not-required` and never leave a placeholder.
+
+Summarize completed assets and real gaps naturally; do not use a fixed status enum to control the parent workflow. Candidates, superseded files, and unresolved review items are not prepared assets. Every missing item needs one plan-ready replacement medium so the Orchestrator can update affected pages and continue without redelegating the same Image task. Declare the whole task unable to continue only when the missing content makes the user's core goal impossible.

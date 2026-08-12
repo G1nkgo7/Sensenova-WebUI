@@ -80,7 +80,7 @@ install_fonts(){
     local bundled_count=0 bundled_font
     for bundled_font in "$BUNDLED_FONTS_DIR"/*.ttf "$BUNDLED_FONTS_DIR"/*.otf; do
       [ -f "$bundled_font" ] || continue
-      cp -n "$bundled_font" "$FONTS_DIR/"
+      cp -f "$bundled_font" "$FONTS_DIR/"
       bundled_count=$((bundled_count + 1))
     done
     log "  已从发布包安装 $bundled_count 个开源字体（离线可用）"

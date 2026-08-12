@@ -111,7 +111,7 @@ Use at a narrative high point. Choose one dominant device: a giant verified numb
 |---|---|
 | precise nodes, connections, stages, hierarchy | Canvas geometry + HTML labels |
 | spatial metaphor or atmospheric mechanism | image + HTML annotation |
-| quantitative comparison, trend, distribution | ECharts |
+| quantitative comparison, trend, frequency patterns | ECharts |
 | icons, logos, arrows, small marks | small SVG |
 | ordinary points or categories | HTML/CSS |
 

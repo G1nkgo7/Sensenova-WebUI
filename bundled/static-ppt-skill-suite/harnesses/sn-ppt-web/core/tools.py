@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sn-ppt-web 专属 Harness 的叶子工具与工具 schema。
+"""Long-Horizon Presenter 专属 Harness 的叶子工具与工具 schema。
 
 ⚠️ 本文件的工具 **schema 严格对齐 hermes-agent**(tools/*.py):工具名称、描述、parameters
 逐字照搬 hermes 的 `{name, description, parameters}`(OpenAI 风格 parameters,**不是** Anthropic
@@ -25,39 +25,45 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 import urllib.request
 
 import requests
 
+try:
+    from .contracts import REVIEW_CLOSEOUT_ARTIFACTS
+except ImportError:  # Direct-file loading used by release smoke tests.
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from contracts import REVIEW_CLOSEOUT_ARTIFACTS
+
 IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 FOREGROUND_MAX_TIMEOUT = int(os.environ.get("TERMINAL_MAX_FOREGROUND_TIMEOUT", "600"))  # 对齐 hermes 默认 600
 
 
-class ImagePolicyRejected(RuntimeError):
-    """The image provider rejected the request/result for safety policy reasons.
+def _subprocess_env():
+    """Make bare ``python`` resolve to the engine runtime for child Agents.
 
-    This is deliberately distinct from transient transport failures. Retrying
-    the exact same prompt cannot make a policy decision healthier and only
-    wastes latency/quota; the Image Agent must first rewrite the brief.
+    Studio normally injects the same directory into PATH.  Keeping this small
+    fallback in the Harness also covers direct CLI use and inherited shells on
+    macOS, Windows and Linux.
     """
-
-
-def _image_policy_code(payload):
-    """Return a normalized provider policy code from a JSON error payload."""
-    if not isinstance(payload, dict):
-        return ""
-    error = payload.get("error")
-    candidates = [payload]
-    if isinstance(error, dict):
-        candidates.insert(0, error)
-    for item in candidates:
-        for key in ("error_code", "code", "type"):
-            value = str(item.get(key) or "").strip().lower()
-            if value:
-                return value
-    return ""
+    env = os.environ.copy()
+    executable = env.get("PPTAGENT_ENGINE_PYTHON") or env.get("ENGINE_PYTHON")
+    if not executable:
+        return env
+    engine_dir = os.path.dirname(os.path.abspath(os.path.expanduser(executable)))
+    current = env.get("PATH", "")
+    parts = [part for part in current.split(os.pathsep) if part]
+    normalized = os.path.normcase(os.path.normpath(engine_dir))
+    parts = [
+        part for part in parts
+        if os.path.normcase(os.path.normpath(part)) != normalized
+    ]
+    env["PATH"] = os.pathsep.join([engine_dir, *parts])
+    return env
 
 
 def _record_asset_provenance(agent, rel, *, origin, source_url=None,
@@ -176,7 +182,12 @@ def read_file(agent, path, offset=1, limit=500, **_extra):
 
 def _visual_source_path(agent, path):
     try:
-        fp = agent.safe(path) if not os.path.isabs(str(path)) else os.path.realpath(str(path))
+        if os.path.isabs(str(path)):
+            fp = os.path.realpath(str(path))
+        elif callable(getattr(agent, "safe", None)):
+            fp = agent.safe(path)
+        else:
+            fp = os.path.realpath(os.path.join(agent.ws, str(path)))
         rel = os.path.relpath(fp, agent.ws).replace(os.sep, "/")
     except Exception:
         return None
@@ -194,6 +205,66 @@ def _mark_visual_source_dirty(agent, path):
         dirty = set()
         setattr(agent, "_dirty_visual_sources", dirty)
     dirty.add(os.path.realpath(fp))
+
+
+def _snapshot_verified_slide(agent, path):
+    """Keep one rollback point before a Slide Agent edits viewed pixels."""
+    label = str(getattr(agent, "label", "") or "")
+    if not label.lower().startswith("slide"):
+        return
+    source = _visual_source_path(agent, path)
+    if not source:
+        return
+    match = re.fullmatch(r"slide_(\d+)\.html", os.path.basename(source), re.I)
+    if not match or not os.path.isfile(source):
+        return
+    page = int(match.group(1))
+    render = os.path.join(agent.ws, "renders", f"slide_{page:02d}.png")
+    if not os.path.isfile(render):
+        return
+    viewed = set()
+    for item in (getattr(agent, "vision_paths", None) or []):
+        item_path = str(item)
+        if not item_path.lower().endswith(tuple(IMG_EXT)):
+            continue
+        if not os.path.isabs(item_path):
+            item_path = os.path.join(agent.ws, item_path)
+        viewed.add(os.path.realpath(item_path))
+    if os.path.realpath(render) not in viewed:
+        return
+    backups = getattr(agent, "_verified_slide_backups", None)
+    if not isinstance(backups, dict):
+        backups = {}
+        agent._verified_slide_backups = backups
+    if page in backups:
+        return
+    backup_dir = os.path.join(agent.ws, "_trace", "slide-backups", label)
+    os.makedirs(backup_dir, exist_ok=True)
+    html_backup = os.path.join(backup_dir, f"slide_{page:02d}.html")
+    png_backup = os.path.join(backup_dir, f"slide_{page:02d}.png")
+    shutil.copy2(source, html_backup)
+    shutil.copy2(render, png_backup)
+    backups[page] = {
+        "source": source,
+        "render": render,
+        "html_backup": html_backup,
+        "png_backup": png_backup,
+    }
+
+
+def restore_verified_slides(agent):
+    """Restore viewed baselines after a blocked Slide repair."""
+    restored = []
+    for page, item in sorted(
+        (getattr(agent, "_verified_slide_backups", None) or {}).items()
+    ):
+        try:
+            shutil.copy2(item["html_backup"], item["source"])
+            shutil.copy2(item["png_backup"], item["render"])
+            restored.append(int(page))
+        except OSError:
+            continue
+    return restored
 
 
 def _review_refine_write_error(agent, path):
@@ -243,6 +314,7 @@ def write_file(agent, path, content, cross_profile=False, **_extra):
     if not getattr(agent, "writable", lambda p: True)(path):
         return (f"write_file 错误:当前角色不允许写 {path}(只读路径)。改写其它路径,"
                 f"或通过 delegate_task 委派有权限的子 agent。")
+    _snapshot_verified_slide(agent, path)
     fp = agent.safe(path)
     os.makedirs(os.path.dirname(fp), exist_ok=True)
     with open(fp, "w", encoding="utf-8") as f:
@@ -264,6 +336,7 @@ def patch(agent, mode="replace", path=None, old_string=None, new_string=None,
         return refine_error
     if not getattr(agent, "writable", lambda p: True)(path):
         return f"patch 错误:当前角色不允许改 {path}(只读路径)。"
+    _snapshot_verified_slide(agent, path)
     fp = agent.safe(path)
     with open(fp, encoding="utf-8") as f:
         s = f.read()
@@ -381,6 +454,7 @@ def terminal(agent, command, background=False, timeout=None, workdir=None,
             command,
             shell=True,
             cwd=cwd,
+            env=_subprocess_env(),
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
@@ -467,12 +541,20 @@ def _slide_vision_freshness_error(agent, fp):
     state = (digest, png_mtime, source_mtime)
     previous = observations.get(key)
     if previous and previous.get("state") != state and previous.get("state", (None,))[0] == digest:
+        previous_state = previous.get("state") or ()
+        previous_source_mtime = previous_state[2] if len(previous_state) > 2 else None
         observations[key] = {"state": state, "count": 1}
-        return (
-            f"vision_analyze 检测到无效修复：renders/slide_{page}.png 虽已重新生成，"
-            "但像素字节与该 Agent 上次查看的版本完全相同。当前修改没有改变页面；"
-            "请回到重叠对象的坐标、尺寸或结构根因，不要继续复看相同像素。"
-        )
+        if previous_source_mtime != source_mtime:
+            return (
+                f"vision_analyze 检测到无效修复：renders/slide_{page}.png 虽已重新生成，"
+                "但像素字节与该 Agent 上次查看的版本完全相同。当前源文件修改没有改变页面；"
+                "请回到重叠对象的坐标、尺寸或结构根因，不要继续复看相同像素。"
+            )
+        # ``render.py --batch`` may intentionally rebuild an unchanged page as
+        # part of final verification.  When neither slide HTML nor base.css has
+        # changed, identical bytes are an idempotent render rather than a failed
+        # repair.  Let Vision certify the new file mtime so final-pixel evidence
+        # can close cleanly instead of forcing the Agent into a fake CSS edit.
     count = int(previous.get("count", 0)) + 1 if previous and previous.get("state") == state else 1
     observations[key] = {"state": state, "count": count}
     if count > 2:
@@ -674,61 +756,61 @@ _SENSENOVA_U1_SIZE = {
 }
 
 
+class ImagePolicyRejected(RuntimeError):
+    """The provider rejected the prompt; retrying it unchanged is wasteful."""
+
+
+def _image_policy_rejection(response):
+    if getattr(response, "status_code", 0) == 451:
+        return True
+    try:
+        payload = response.json()
+    except Exception:
+        return False
+    text = json.dumps(payload, ensure_ascii=False).lower()
+    return any(marker in text for marker in (
+        "image_unsafe", "content_policy", "safety", "unsafe", "policy violation",
+    ))
+
+
 def _image_api_request(agent, prompt, size, aspect_ratio=None):
-    """Call the selected image provider and return its decoded JSON payload."""
+    """Call the configured Images API provider and return decoded JSON."""
     provider = str(getattr(agent, "image_provider", "openai_images") or "openai_images").lower()
     base = str(agent.img_base or "").rstrip("/")
-    headers = {
-        "Authorization": f"Bearer {agent.img_key}",
-        "Content-Type": "application/json",
-    }
+    endpoint = base if base.endswith("/images/generations") else f"{base}/images/generations"
+    body = {"model": agent.image_model, "prompt": prompt}
     if provider == "sensenova_u1":
-        endpoint = base if base.endswith("/images/generations") else f"{base}/images/generations"
-        body = {
-            "model": agent.image_model,
-            "prompt": prompt,
+        body.update({
             "size": _SENSENOVA_U1_SIZE.get(aspect_ratio, "2752x1536"),
             "response_format": "url",
             "output_format": "png",
-        }
+        })
     elif provider == "openai_images":
-        endpoint = base if base.endswith("/images/generations") else f"{base}/images/generations"
-        body = {"model": agent.image_model, "prompt": prompt, "size": size, "n": 1}
+        body.update({"size": size, "n": 1})
     else:
         raise ValueError(f"不支持的生图服务类型: {provider}")
-    # Image generation can legitimately take several minutes under load. Keep
-    # the timeout per request (one image) so a slow image does not prematurely
-    # fail an otherwise healthy generation task.
-    response = requests.post(endpoint, headers=headers, json=body, timeout=600)
-    try:
-        payload = response.json()
-    except (TypeError, ValueError):
-        payload = None
-    status_code = int(getattr(response, "status_code", 200) or 200)
-    policy_code = _image_policy_code(payload)
-    if status_code == 451 or policy_code in {
-        "image_unsafe",
-        "content_policy_violation",
-        "content_policy_rejected",
-        "safety_violation",
-    }:
-        raise ImagePolicyRejected(
-            "IMAGE_POLICY_REJECTED：生图服务拒绝了当前提示词或生成结果。"
-            "不要原样重试；请保留视觉意图并安全改写提示词，最多再尝试一次。"
-        )
+    response = requests.post(
+        endpoint,
+        headers={
+            "Authorization": f"Bearer {agent.img_key}",
+            "Content-Type": "application/json",
+        },
+        json=body,
+        # One request generates one image. U1 and OpenAI-compatible image
+        # services may need several minutes when the backend is under load.
+        timeout=600,
+    )
+    if _image_policy_rejection(response):
+        raise ImagePolicyRejected("IMAGE_POLICY_REJECTED")
     response.raise_for_status()
+    payload = response.json()
     if not isinstance(payload, dict):
         raise ValueError("生图服务返回的不是 JSON 对象")
     return payload
 
 
 def _image_candidates(value, *, field=""):
-    """Yield image data URLs, base64 values and downloadable URLs from provider JSON.
-
-    Both SenseNova U1 and OpenAI-compatible image servers normally use
-    data[0].url/b64_json. Keep this parser deliberately tolerant so compatible
-    gateways returning content blocks or message.images still work.
-    """
+    """Yield image URLs/base64 from standard and compatible response shapes."""
     if isinstance(value, dict):
         preferred = (
             "b64_json", "image_base64", "base64", "image_url", "url",
@@ -754,30 +836,18 @@ def _image_candidates(value, *, field=""):
         return
     if text.startswith("data:image/"):
         yield ("data_url", text)
-        return
-    if field in {"b64_json", "image_base64", "base64"}:
+    elif field in {"b64_json", "image_base64", "base64"}:
         yield ("base64", text)
-        return
-    if field in {"url", "image_url"} and text.startswith(("http://", "https://")):
+    elif field in {"url", "image_url"} and text.startswith(("http://", "https://")):
         yield ("url", text)
-        return
-    for match in re.finditer(r"!\[[^\]]*\]\((data:image/[^)\s]+|https?://[^)\s]+)\)", text):
-        target = match.group(1)
-        yield ("data_url" if target.startswith("data:image/") else "url", target)
-    for match in re.finditer(r"https?://[^\s<>\"')]+", text):
-        target = match.group(0).rstrip(".,;:")
-        if re.search(r"\.(?:png|jpe?g|webp|gif)(?:\?|$)", target, re.I):
-            yield ("url", target)
 
 
 def _image_bytes_from_payload(payload):
-    """Resolve the first image embedded in or referenced by a provider response."""
     errors = []
     for kind, value in _image_candidates(payload):
         try:
             if kind == "data_url":
-                encoded = value.split(",", 1)[1]
-                return base64.b64decode(encoded)
+                return base64.b64decode(value.split(",", 1)[1])
             if kind == "base64":
                 return base64.b64decode(value)
             if kind == "url":
@@ -806,10 +876,10 @@ def _image_gen_one(agent, prompt, size, aspect_ratio=None):
         try:
             payload = _image_api_request(agent, prompt, size, aspect_ratio)
             data = _image_bytes_from_payload(payload)
-        except ImagePolicyRejected as e:
+        except ImagePolicyRejected:
             return (
-                f"{e} 若改写后仍被拒绝，请改用真实图片检索、已有素材、"
-                "非人物视觉或 Canvas/排版方案，不要尝试绕过安全过滤器。"
+                "IMAGE_POLICY_REJECTED：该提示词被安全策略拒绝；"
+                "不要尝试绕过安全过滤器，请改用合规素材或调整视觉方案。"
             )
         except Exception as e:
             last_err = str(e)[:160]
@@ -1101,6 +1171,7 @@ DELEGATE_TASK_SCHEMA = {
             "goal": {"type": "string", "description": "What the subagent should accomplish. Be specific and self-contained -- the subagent knows nothing about your conversation history."},
             "label": {"type": "string", "description": "Identity name for this subagent (e.g. slide/image/research/presenter/audience/player — see the skill's subagents/*.md). Used to name its trajectory directory and to identify it on return. ALWAYS set this; do not leave it to the default child_NN."},
             "context": {"type": "string", "description": "Background information the subagent needs: file paths, error messages, project structure, constraints. The more specific you are, the better the subagent performs."},
+            "assigned_pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Structured page ownership for a slide subagent. Prefer this over embedding page numbers only in prose."},
             "toolsets": {"type": "array", "items": {"type": "string"}, "description": ("Toolsets to enable for this subagent. Default: inherits your enabled toolsets. "
                           f"Available toolsets: {_TOOLSET_LIST_STR}. Common patterns: ['terminal', 'file'] for code work, ['web'] for research, ['browser'] for web interaction, ['terminal', 'file', 'web'] for full-stack tasks.")},
             "tasks": {
@@ -1111,6 +1182,7 @@ DELEGATE_TASK_SCHEMA = {
                         "goal": {"type": "string", "description": "Task goal"},
                         "label": {"type": "string", "description": "Identity name for this subagent (e.g. slide/image/research/presenter/audience/player — see the skill's subagents/*.md). Used to name its trajectory directory and to identify it on return. ALWAYS set this; do not leave it to the default child_NN."},
                         "context": {"type": "string", "description": "Task-specific context"},
+                        "assigned_pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "description": "Structured page ownership for this slide task."},
                         "toolsets": {"type": "array", "items": {"type": "string"}, "description": f"Toolsets for this specific task. Available: {_TOOLSET_LIST_STR}. Use 'web' for network access, 'terminal' for shell, 'browser' for web interaction."},
                         "acp_command": {"type": "string", "description": "Per-task ACP command override (e.g. 'copilot'). Overrides the top-level acp_command for this task only. Do NOT set unless the user explicitly told you an ACP CLI is installed."},
                         "acp_args": {"type": "array", "items": {"type": "string"}, "description": "Per-task ACP args override. Leave empty unless acp_command is set."},
@@ -1197,16 +1269,43 @@ def resolve_toolsets(names):
     return out
 
 
+def _workspace_relative_path(agent, raw_path):
+    """Return a canonical workspace-relative path, or ``""`` when unsafe.
+
+    Closeout allowlists must compare canonical paths rather than manipulating
+    user input with ``lstrip``: the latter can turn ``../`` into an apparently
+    safe path and rejects valid absolute paths inside the workspace.  Reuse the
+    Agent sandbox resolver, then additionally resolve symlinks before comparing
+    the final target with the workspace root.  ``commonpath`` can raise on
+    different Windows drives, so keep that case closed by default.
+    """
+    value = str(raw_path or "").strip()
+    if not value:
+        return ""
+    try:
+        candidate = agent.safe(value)
+        workspace = os.path.realpath(agent.ws)
+        resolved = os.path.realpath(candidate)
+        if os.path.commonpath([workspace, resolved]) != workspace:
+            return ""
+        relative = os.path.relpath(resolved, workspace)
+    except (AttributeError, OSError, TypeError, ValueError):
+        return ""
+    if relative in {"", "."}:
+        return "."
+    return relative.replace(os.sep, "/")
+
+
 def dispatch(agent, name, args):
     """按名字找工具——先查 agent 专属的 extra_tools(如 delegate_task),再查 BUILTINS。"""
     if getattr(agent, "_finalization_only", False):
         role = str(getattr(agent, "_finalization_role", "") or "").lower()
-        path = str((args or {}).get("path") or "").replace("\\", "/").lstrip("./")
+        path = _workspace_relative_path(agent, (args or {}).get("path"))
         allowed = False
         if role in {"research", "material"}:
             allowed = name in {"write_file", "patch"}
         elif role == "review":
-            allowed = name in {"write_file", "patch"} and path == "_trace/review-issues.md"
+            allowed = name in {"write_file", "patch"} and path in REVIEW_CLOSEOUT_ARTIFACTS
         # Slide has no canonical closeout artifact.  It must return blocked in text
         # instead of making one last unverified page edit.
         if allowed:
@@ -1216,15 +1315,25 @@ def dispatch(agent, name, args):
             return fn(agent, **args) if fn else f"未知工具 {name}"
         language = str(getattr(agent, "prompt_language", "zh") or "zh").lower()
         if language == "en":
+            review_hint = (
+                " Review closeout may only write _trace/review-issues.md and "
+                "_trace/content-fidelity.md."
+                if role == "review" else ""
+            )
             return (
                 f"{name} is unavailable during {role or 'role'} stall finalization. "
-                "Use only the permitted closeout artifact, then return the exact structured "
+                f"Use only the permitted closeout artifact.{review_hint} Then return the exact structured "
                 "role contract from existing evidence. Report ready when its gates are already "
                 "satisfied; otherwise report the truthful partial/blocked state."
             )
+        review_hint = (
+            "Review 收口只允许写 _trace/review-issues.md 与 "
+            "_trace/content-fidelity.md。"
+            if role == "review" else ""
+        )
         return (
             f"{role or '当前角色'} 停滞收口阶段不再允许 {name}。"
-            "请只写允许的收口产物，随后基于已有证据返回角色卡要求的完整结构化合同；"
+            f"请只写允许的收口产物。{review_hint}随后基于已有证据返回角色卡要求的完整结构化合同；"
             "门槛已经满足则如实 ready，否则如实 partial/blocked。"
         )
     if name in agent.extra_tools:

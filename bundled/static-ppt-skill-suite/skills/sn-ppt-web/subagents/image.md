@@ -6,7 +6,7 @@
 
 你负责一个互不重叠的图片分片：按配图 brief 获取真实图片或生成位图，检查可用性，落到 `assets/`，返回实际路径。Orchestrator 按共享视觉配方与可一次审清的素材组拆分任务，不追求固定张数。
 
-完成意味着：每个 `asset_id` 都有一个确认可用的本地文件，或有明确失败原因和可执行降级建议；全组素材共享同一视觉配方。
+完成意味着：每个 `asset_id` 都有一个确认可用的本地文件，或有明确失败原因和可执行降级建议；全组素材共享同一视觉配方。只有正式素材已写入 `assets/catalog.json`、状态为 `ready` 且实际路径存在时，才能返回 `status: ready`。自然语言总结只说明结果，不能承担路径映射或素材清单职责。
 
 ## 2. 输入、读取与写入边界
 
@@ -26,6 +26,7 @@ goal 会给出稳定的 `group_id`，以及每项素材的 `asset_id`、用途�
 - 大型概念页：可生成“无文字视觉底图”，准确节点、数值与关系标签交给 Slide 放在 HTML 层。
 - 数据图表不属于图片任务；交给 Slide 用 ECharts。
 - 精确流程、架构、层级和关系图优先由 Slide 用 Canvas + HTML 标签完成。
+- 对具备可见主体的普通内容页，优先提供能承担 hero、图字分屏或主要证据职责的高质量位图，不用微型图标或抽象 SVG 代替人物、地点、产品、作品、活动与场景。复杂主视觉若不适合位图，由 Slide 使用 Canvas + HTML；SVG 只用于小型辅助图形。
 
 ## 4. 工作流
 
@@ -105,7 +106,12 @@ assets:
     treatment: none | cutout | <CSS 调和建议>
     crop_contract: fit=<cover|contain|cutout>; focal=<位置>; protect=<主体部位/图内信息>; allowed=<可裁背景>; object_position=<x% y%>
 missing: none | <asset_id + 原因 + 降级建议>
-transparent_assets: assets/<name>-cutout.png, assets/<name>-cutout.png | not-required
 ```
 
-一个分片只有全部计划 `asset_id` 均在 `assets/catalog.json` 中达到 `ready`、实际路径存在时才能返回 `status: ready`；否则返回 `blocked` 并逐项列出缺口，不用 `partial` 掩盖未完成素材。候选、被替换文件和 `needs_review` 不得计入已准备素材。只要 goal 中任一素材要求 `subject_only: true`、透明背景、主体透明或抠图，`status: ready` 就必须给出 `transparent_assets`，且其中只列已经通过 Alpha 检查与 Vision 的最终派生文件。
+> **仅透明任务才输出 `transparent_assets`。** 上面的返回合同**不含** `transparent_assets` 字段。只有当 goal 真实要求 `subject_only: true` / `presentation: subject-only` / 透明背景 / 主体透明 / 抠图 / 去背时，才在合同末尾**追加一行**：
+> ```text
+> transparent_assets: assets/<name>-cutout.png[, assets/<name>-cutout.png ...]
+> ```
+> 且其中只列已通过 Alpha 检查与 Vision 的最终派生 cutout。非透明任务**完全不输出这个 key**——不写 `transparent_assets: not-required`，不留占位。
+
+一个分片只有全部计划 `asset_id` 均在 `assets/catalog.json` 中达到 `ready`、实际路径存在时才能返回 `status: ready`；否则返回 `blocked` 并逐项列出缺口，不用 `partial` 掩盖未完成素材。候选、被替换文件和 `needs_review` 不得计入已准备素材。

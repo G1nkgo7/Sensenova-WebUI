@@ -2,7 +2,7 @@
 
 ## 1. License boundary
 
-Use only fonts that are bundled with a redistribution license, installed by this Skill's font installer, or explicitly supplied and authorized by the user. Do not assume a locally installed commercial family may be packaged in delivery artifacts.
+Use only fonts whose license permits packaging, fonts installed by this Skill's installer, or fonts explicitly supplied and authorized by the user. Do not assume a locally installed commercial family may be packaged in delivery artifacts.
 
 `materials/font-config.json`, when present, is authoritative for title, body, number, mono, and annotation roles. Keep the original user font files under materials and let the deterministic font bundler create delivery subsets.
 
@@ -13,7 +13,7 @@ Use only fonts that are bundled with a redistribution license, installed by this
 | Display/title | `--font-display` | Noto Sans/Serif SC; Unbounded, Syne, Archivo, Fraunces, or another registered display role when the occasion supports it | Covers, dividers, large statements |
 | Body | `--font-body` | Noto Sans SC, Noto Serif SC | Paragraphs, tables, labels |
 | Numbers | `--font-number` | IBM Plex Sans, Archivo, DM Sans | KPIs and numeric hierarchy |
-| Mono/data | `--font-mono` | IBM Plex Mono | Code, coordinates, technical labels |
+| Mono/data | `--font-mono` | IBM Plex Mono | **Pure-Latin** code, coordinates, IDs, real serial numbers; no CJK glyphs — **never use for Chinese** |
 | Annotation | `--font-annotation` | Body role; Xiaolai/LXGW WenKai or a registered handwriting role when intentional | Captions, sources, notes, short expressive quotations |
 
 Always include a generic fallback at the end of a stack. A family name alone does not prove the font exists or is distributable.
@@ -21,7 +21,8 @@ Always include a generic fallback at the end of a stack. A family name alone doe
 ## 3. Usage rules
 
 - Activate role tokens explicitly in `base.css`; do not rely on browser defaults.
-- Let the occasion determine role count. Expressive covers, heroes, and dividers may coordinate three or four stable roles; formal decks should converge on two or three. Every role needs a persistent job across pages.
+- **Whole-deck font families ≤ 3 (hard limit).** Across the entire deck use at most **3** font families, applied uniformly — the same role uses the same family on every page; do not swap fonts per page topic. A typical split: one Chinese title/body family (Noto Sans SC or an occasion-appropriate Chinese display face) + one Latin/numeric family (e.g. Archivo / IBM Plex Sans) + at most one on-topic accent family (calligraphy/handwriting/display, only when the theme truly needs it). Formal decks should converge to **1–2** families. Fewer-but-uniform beats a new look on every page.
+- Chinese body, tables, chart labels, footers, eyebrows, and page numbers always use `--font-sans` (or `--font-serif` for rigorous serif contexts). **Never put Chinese in `--font-mono`** — IBM Plex Mono has no Chinese glyphs, so Chinese falls back to whatever CJK font the system has (often a cartoon/handwriting face). `--font-mono` serves only pure-Latin code, coordinates, APIs, and real serial numbers.
 - Match font personality to the occasion: serif for editorial, cultural, or reflective work; sans for technology, business, teaching, and dense data; mono only for controlled technical accents.
 - Keep a Chinese sentence, title, conclusion, button, or label in one family. Local emphasis changes color, weight, size, or decoration—not the font family.
 - Treat playful, rounded, handwritten, and calligraphic CJK fonts as scene-specific roles rather than global defaults or global bans. Children, comics, craft, classroom, personal journal, travel, and explicitly calligraphic directions may activate them; government, legal, medical, formal academic, and conservative business decks normally should not. Mark each intentional use with `.is-expressive-type` or `data-type-intent="expressive"`.

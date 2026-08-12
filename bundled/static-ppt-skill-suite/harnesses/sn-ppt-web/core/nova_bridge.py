@@ -1,4 +1,4 @@
-"""Optional Nova exact-raw transport for the sn-ppt-web harness.
+"""Optional Nova exact-raw transport for the Long-Horizon Presenter harness.
 
 The Presenter Skill and role workflow remain unchanged.  This module only
 replaces the two model transports required by the Nova V2 brushing contract:
@@ -47,7 +47,7 @@ def _load_recorder_module():
         if not path.is_file():
             raise RuntimeError(f"Nova raw recorder module is missing: {path}")
         spec = importlib.util.spec_from_file_location(
-            "sn_ppt_web_nova_raw", path
+            "long_horizon_presenter_nova_raw", path
         )
         if spec is None or spec.loader is None:
             raise RuntimeError(f"cannot load Nova raw recorder: {path}")

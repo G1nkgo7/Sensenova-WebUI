@@ -11,11 +11,11 @@ __pycache__/
 
 # Runtime data and generated artifacts
 studio/data/
-distillation/data/
-distillation/data_openai/
-distillation/runs/
-distillation/logs/
-distillation/log/
+inference/data/
+inference/data_openai/
+inference/runs/
+inference/logs/
+inference/log/
 web/.cache/
 
 # Local deployment notes / backups

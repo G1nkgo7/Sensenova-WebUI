@@ -16,7 +16,7 @@ from .db import DATA_DIR
 
 CONFIG_VERSION = 4
 CONFIG_DIR = DATA_DIR / "user_configs"
-DEFAULT_MAX_TOKENS = 40960
+DEFAULT_MAX_TOKENS = 65536
 DEFAULT_STATIC_MAX_TURNS = 4096
 DEFAULT_STATIC_SUBAGENT_MAX_TURNS = 200
 DEFAULT_DYNAMIC_MAX_TURNS = 4096
@@ -58,7 +58,8 @@ def system_runtime_env() -> dict[str, str]:
         env["IMAGE_API_KEY"] = image_key
     if image_model:
         env["IMAGE_MODEL"] = image_model
-    env["IMAGE_PROVIDER"] = image_provider
+    if image_url or image_key or image_model:
+        env["IMAGE_PROVIDER"] = image_provider
 
     search_url = _deployment_value("SENSENOVA_SEARCH_BASE_URL")
     search_key = _deployment_value("SENSENOVA_SEARCH_API_KEY")
@@ -169,7 +170,7 @@ def update(
     user_id: int,
     *,
     image_enabled: bool,
-    image_provider: str,
+    image_provider: str = DEFAULT_IMAGE_PROVIDER,
     image_base_url: str,
     image_model: str,
     image_api_key: str | None,

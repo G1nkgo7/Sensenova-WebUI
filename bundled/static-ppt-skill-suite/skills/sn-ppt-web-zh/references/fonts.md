@@ -46,7 +46,7 @@
 | `--font-hand-en-casual` | Indie Flower | 随性英文手写；Google Fonts / OFL |
 | `--font-hand-en-script` | Dancing Script，Sacramento | 英文连笔、签名和短引语；Google Fonts / OFL |
 | `--font-hand-en-marker` | Kalam，Shadows Into Light | 英文马克笔、板书和教学批注；Google Fonts / OFL |
-| `--font-mono` | IBM Plex Mono | 代码、坐标、ID、技术眉签；IBM/Google Fonts / OFL |
+| `--font-mono` | IBM Plex Mono | **纯拉丁**代码、坐标、ID、真实编号、纯拉丁技术眉签；无中文字形，**中文一律不用**；IBM/Google Fonts / OFL |
 | `--font-number` | 由 Style Lock 映射 | Hero 数字、KPI、章节序号的数字主声部 |
 
 ## 3. 使用规则
@@ -58,7 +58,8 @@
 - 同一句中文标题、结论、按钮或标签只用一个字体家族。局部强调只改颜色、字重、字号或装饰线，不把强调词换成另一套字体；“普通黑体 + 卡通强调字”属于硬伤。
 - 卡通、圆趣、手写、书法字体是场景化角色，不是全局默认，也不是全局禁用。童趣、漫画、手作、课堂、私人手账、文旅与明确书写性主题可以主动选择；政务、法律、医疗、严谨学术与正式商务通常不选。使用时在元素上添加 `.is-expressive-type` 或 `data-type-intent="expressive"`；没有声明时渲染器会判为字体语义错误。
 - 连笔签名字体只承担短语和名字；马克笔/板书体适合教学提示和海报批注，均不承担长正文。
-- 表达型 deck 使用 3–4 个角色即可；严谨型 deck 收到 2–3 个角色。字体数量不是质量目标，每款都必须有明确职责。
+- **全册字体家族总数 ≤ 3(硬约束)**：整册（跨全部页面）最多出现 **3 个**字体家族，且必须全册统一——同一角色在每一页都用同一家族，不因页面题材临时换字体。典型的三族分工：中文标题/正文一族（Noto Sans SC 或按场合的中文展示体）+ 拉丁/数字一族（如 Archivo / IBM Plex Sans）+ 至多一个合题点缀族（书法/手写/展示，仅在主题真正需要时）。严谨型 deck 收敛到 **1–2 族**即可。字体数量不是质量目标：宁可少而统一，也不要每页换花样。
+- 中文正文、表格、图表标注、页脚、眉签、页码一律用 `--font-sans`（严谨衬线场景可用 `--font-serif`），**绝不用 `--font-mono` 承载中文**——IBM Plex Mono 无中文字形，中文落进去会回退成系统里的卡通/手写体。`--font-mono` 只服务纯拉丁代码、坐标、API、真实编号。
 - 中文必须保留 Noto Sans/Serif SC 兜底，避免拉丁展示体缺中文字形时出现豆腐块。
 
 ## 4. 常用搭配

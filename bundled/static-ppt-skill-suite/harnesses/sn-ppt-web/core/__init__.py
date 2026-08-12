@@ -30,6 +30,26 @@ def _strip_markdown_wrapper(value):
     return value
 
 
+def _normalize_contract_line(line):
+    """Normalize Markdown around a structured ``key:`` label.
+
+    Models sometimes bold the label including its colon, for example
+    ``**output:** research/research.md``.  Without this normalization the
+    closing ``**`` is parsed as part of the value and turns a valid workspace
+    path into ``** research/research.md``.
+    """
+    candidate = re.sub(r"^\s*[-*+]\s+", "", str(line or "").strip())
+    wrapped_label = re.match(
+        r"^(?P<wrapper>\*\*|__|`)"
+        r"(?P<label>[A-Za-z][A-Za-z0-9_-]*\s*[:：])"
+        r"(?P=wrapper)\s*(?P<value>.*)$",
+        candidate,
+    )
+    if wrapped_label:
+        return f"{wrapped_label.group('label')} {wrapped_label.group('value')}".strip()
+    return _strip_markdown_wrapper(candidate)
+
+
 def _contract_value(key, value):
     """Normalize one explicit field without guessing a verdict from prose."""
     normalized_key = str(key).lower().replace("-", "_")
@@ -41,7 +61,16 @@ def _contract_value(key, value):
         if not value:
             return "none"
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    cleaned = _strip_markdown_wrapper(value).strip().lower()
+    raw = _strip_markdown_wrapper(value).strip()
+    if normalized_key == "output":
+        # ``output`` is a case-sensitive workspace path.  Be defensive about
+        # dangling Markdown left by weak serializers, but do not lowercase it.
+        raw = re.sub(r"^(?:\*\*|__|`)+\s*", "", raw)
+        raw = re.sub(r"\s*(?:\*\*|__|`)+$", "", raw).strip()
+        if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {"'", '"'}:
+            raw = raw[1:-1].strip()
+        return raw
+    cleaned = raw.lower()
     if normalized_key == "remaining" and cleaned == "[]":
         return "none"
     if normalized_key == "status":
@@ -96,8 +125,7 @@ def _final_contract(text):
     for line in source.splitlines():
         # A bullet must contain following whitespace.  This avoids mistaking the
         # first asterisk of ``**status: ready**`` for a list marker.
-        candidate = re.sub(r"^\s*[-*+]\s+", "", line.strip())
-        candidate = _strip_markdown_wrapper(candidate)
+        candidate = _normalize_contract_line(line)
         match = _CONTRACT_FIELD_RE.fullmatch(candidate)
         if not match:
             continue
@@ -109,8 +137,8 @@ def _final_contract(text):
     # as "not ready", "状态表" or "Review 已返回 ready".
     if "status" not in fields:
         for line in source.splitlines():
-            candidate = re.sub(r"^\s*[-*+]\s+", "", line.strip())
-            match = _LOCALIZED_STATUS_RE.fullmatch(_strip_markdown_wrapper(candidate))
+            candidate = _normalize_contract_line(line)
+            match = _LOCALIZED_STATUS_RE.fullmatch(candidate)
             if match:
                 fields["status"] = match.group(1).lower()
                 break

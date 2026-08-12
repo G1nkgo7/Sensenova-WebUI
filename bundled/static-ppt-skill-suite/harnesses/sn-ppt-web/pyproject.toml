@@ -1,7 +1,7 @@
 [project]
-name = "ppt-inference-v2"
+name = "sn-ppt-web-runtime"
 version = "0.1.0"
-description = "PPT agentic SFT 数据推理 V2 —— 薄 harness(core/)+ PPT 入口(distill_ppt.py)"
+description = "sn-ppt-web 生成运行时 —— 薄 harness(core/)+ PPT 入口(presenter.py)"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=0.40",

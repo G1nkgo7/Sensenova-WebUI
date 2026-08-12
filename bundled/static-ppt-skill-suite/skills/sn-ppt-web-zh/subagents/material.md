@@ -87,7 +87,7 @@ goal 会给出：`assignment_id`、deck 主题、确切附件路径、独立工�
 最终回复可以先用一小段自然语言概括，但**最后必须原样输出下面这组逐行键值，且其后不再追加正文**。`catalog` 中的 `status: ok` 不能代替本角色的 `status: ready`；缺少这组合同会使已完成的附件处理无法被编排器确认。
 
 ```text
-status: ready | partial | blocked
+status: ready | blocked
 assignment: <assignment_id>
 processed: <附件清单>
 coverage: complete | incomplete

@@ -40,6 +40,7 @@ Continue reading any selected file from its continuation offset until EOF before
 ## Candidate visuals or datasets
 ## Sources
 ```
+
 ## 4. Stop rules and red lines
 
 - Never invent a citation, URL, statistic, date, quotation, benchmark, or source scope.
@@ -61,3 +62,4 @@ unresolved: none | <claim + reason + safe handling>
 sources: <count>
 summary: <one or two sentences>
 ```
+

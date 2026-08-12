@@ -46,7 +46,7 @@
 | `--font-hand-en-casual` | Indie Flower | 随性英文手写；Google Fonts / OFL |
 | `--font-hand-en-script` | Dancing Script，Sacramento | 英文连笔、签名和短引语；Google Fonts / OFL |
 | `--font-hand-en-marker` | Kalam，Shadows Into Light | 英文马克笔、板书和教学批注；Google Fonts / OFL |
-| `--font-mono` | IBM Plex Mono | 代码、坐标、ID、技术眉签；IBM/Google Fonts / OFL |
+| `--font-mono` | IBM Plex Mono | **纯拉丁**代码、坐标、ID、真实编号、纯拉丁技术眉签；无中文字形，**中文一律不用**；IBM/Google Fonts / OFL |
 | `--font-number` | 由 Style Lock 映射 | Hero 数字、KPI、章节序号的数字主声部 |
 
 ## 3. 使用规则
@@ -58,15 +58,29 @@
 - 同一句中文标题、结论、按钮或标签只用一个字体家族。局部强调只改颜色、字重、字号或装饰线，不把强调词换成另一套字体；“普通黑体 + 卡通强调字”属于硬伤。
 - 卡通、圆趣、手写、书法字体是场景化角色，不是全局默认，也不是全局禁用。童趣、漫画、手作、课堂、私人手账、文旅与明确书写性主题可以主动选择；政务、法律、医疗、严谨学术与正式商务通常不选。使用时在元素上添加 `.is-expressive-type` 或 `data-type-intent="expressive"`；没有声明时渲染器会判为字体语义错误。
 - 连笔签名字体只承担短语和名字；马克笔/板书体适合教学提示和海报批注，均不承担长正文。
-- 表达型 deck 使用 3–4 个角色即可；严谨型 deck 收到 2–3 个角色。字体数量不是质量目标，每款都必须有明确职责。
+- **全册字体家族总数 ≤ 3(硬约束)**：整册（跨全部页面）最多出现 **3 个**字体家族，且必须全册统一——同一角色在每一页都用同一家族，不因页面题材临时换字体。典型的三族分工：中文标题/正文一族（Noto Sans SC 或按场合的中文展示体）+ 拉丁/数字一族（如 Archivo / IBM Plex Sans）+ 至多一个合题点缀族（书法/手写/展示，仅在主题真正需要时）。严谨型 deck 收敛到 **1–2 族**即可。字体数量不是质量目标：宁可少而统一，也不要每页换花样。
+- 中文正文、表格、图表标注、页脚、眉签、页码一律用 `--font-sans`（严谨衬线场景可用 `--font-serif`），**绝不用 `--font-mono` 承载中文**——IBM Plex Mono 无中文字形，中文落进去会回退成系统里的卡通/手写体。`--font-mono` 只服务纯拉丁代码、坐标、API、真实编号。
 - 中文必须保留 Noto Sans/Serif SC 兜底，避免拉丁展示体缺中文字形时出现豆腐块。
 
 ## 4. 常用搭配
 
-- 学术/报告：Noto Serif SC 标题 + Noto Sans SC 正文 + Xiaolai 短批注。
+优先从下表选一个预设，再按用户品牌材料微调；不要让模型从全部字体中自由拼盘：
+
+| 预设 | 中文标题 | 正文 | 英文 / 数字 | 可选点缀 |
+| --- | --- | --- | --- | --- |
+| `formal-business` 政务、管理、销售 | Noto Sans SC 800/900 | Noto Sans SC | Archivo | 无；中文眉签仍用 Noto Sans SC |
+| `academic-editorial` 学术、人文 | Noto Serif SC 700/900 | Noto Sans SC | Spectral / Archivo | LXGW WenKai 短引言 |
+| `tech-product` 科技、产品、工程 | Noto Sans SC 800/900 | Noto Sans SC | Sora / Space Grotesk / Archivo | IBM Plex Mono 仅代码与接口 |
+| `brand-editorial` 品牌、杂志、奢华 | Noto Serif SC / ZCOOL XiaoWei | Noto Sans SC | Playfair Display / Fraunces | 无或一次短引语 |
+| `culture-travel` 文旅、文化 | Noto Serif SC / ZCOOL XiaoWei | Noto Sans SC | Archivo | LXGW WenKai；Ma Shan Zheng 仅一次短大字 |
+| `children-comic` 儿童、漫画、手作 | ZCOOL KuaiLe | Noto Sans SC | Patrick Hand | Xiaolai 短批注 |
+| `sport-poster` 体育、海报 | Noto Sans SC 900 | Noto Sans SC | Oswald / Bebas Neue | 无 |
+
+- 政务/管理/销售：Noto Sans SC 800/900 标题 + Noto Sans SC 正文 + Archivo 数字；部门名和眉签仍用 Noto Sans SC，不使用 mono。
+- 学术/报告：Noto Serif SC 标题 + Noto Sans SC 正文；教学、人文或演讲型内容可加入 Xiaolai 短批注，正式论文答辩则不加。
 - 技术/数据：Noto Sans SC 900 大字 + Noto Sans SC 正文 + Archivo 数字；IBM Plex Mono 只做技术标识。
 - 电影/漫画/儿童：ZCOOL KuaiLe 标题 + Noto Sans SC 正文 + Patrick Hand 批注。
-- 文旅/传统：Ma Shan Zheng 只做短大标题 + Xiaolai 章节/引言 + Noto Sans SC 正文；信息型长标题直接用 Xiaolai，草书仅点一次。
+- 文旅/传统：Ma Shan Zheng 只做短大标题 + Xiaolai / LXGW WenKai 章节与引言 + Noto Sans SC 正文；信息型长标题根据场合在 Xiaolai、LXGW WenKai、Noto Serif SC 或 ZCOOL XiaoWei 中选一套，草书只点一次。
 - 编辑/杂志：Fraunces 拉丁展示 + Noto Serif SC 中文标题 + Noto Sans SC 正文 + Archivo accent。
 - 科技/产品：Space Grotesk 或 Sora 展示 + Noto Sans SC 中文 + DM Sans 数据与英文标签。
 - 体育/海报：Oswald 或 Barlow Condensed 主标题 + Noto Sans SC 中文正文；Bebas Neue / League Gothic 只做英文和数字。

@@ -91,6 +91,8 @@ Use this exact semantic structure:
 - source line:
 
 ## Visual implementation
+- image_opportunity: **a single machine-readable enum only, with no explanation** — `real_required` / `generated_ok` / `none` / `chart_only` / `canvas_only` / `typography_only` (`none` and `*_only` are read as no-bitmap). The startup gate and final acceptance parse only this enum line; put the reason on the next `image_opportunity_reason` line, never on this one.
+- image_opportunity_reason: one-line human reason. Named real people/works/products/processes default to a real-image opportunity (retrieve portraits/official shots) — "no photo on hand" / "CSS is safer" / "style unity" are not sufficient reasons for `none`.
 - primary_medium: real-image | generated-image | echarts | canvas | typography
 - composition:
 - background_treatment:
@@ -109,11 +111,19 @@ Use this exact semantic structure:
   palette_and_mood:
   crop_contract: fit=...; focal=...; protect=...; allowed=...; object_position=...
 
+> `presentation` is the bitmap **render / background-handling contract** and may
+> ONLY be one of the four enums above.  Required on a bitmap page; **omit the line
+> entirely on a no-bitmap page** (never write `none` / `not-applicable` / a CJK
+> placeholder).  ⛔ `split-media` / `right-half` / `cards` are **layout/arch**, not
+> presentation — put those under the layout/composition field.  A real photo used
+> in a left/right split is `presentation: framed-scene` (the split is layout).
+> `subject-only` also requires `subject_only: true` in the image brief.
+
 ## Reference route
 - references/<file>.md#<section>
 
 ## Sources
-- <source or user attachment>
+- <internal traceability field, for speaker-notes reference and self-check only; **never on screen**. Record the source for each on-screen fact, or user-provided / none. File paths / section anchors (e.g. `research/research.md §2.4`) stay here only, never printed as a page source>
 
 ## Speaker notes
 - <spoken explanation, evidence boundary, and transition>

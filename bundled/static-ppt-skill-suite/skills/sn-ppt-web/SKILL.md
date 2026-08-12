@@ -27,7 +27,7 @@ Orchestrator 只负责：**判断模式、规划、委派、合并、验收和�
 - 不直接写：`slides/slide_NN.html`；页面由 Slide 或 Review 修改。
 - 不伪装工具能力，不把计划动作写成已完成动作。
 - 每个 subagent 必须有显式 label；失败、超时或未自然收尾的结果不得当成完成品。
-- `delegate_task` 返回的结构化 contract、artifact paths 与 `handoff_path` 是父级交接真相；Orchestrator 不读取子 Agent 的 `messages.json`、`tool_log.json` 或 system/tool 快照来轮询进度。Research 与 Review 是任务级单例：第一次失败就如实阻塞本任务，不创建 `_r2/_r3` 绕过。
+- `delegate_task` 返回的结构化 contract、artifact paths 与 `handoff_path` 是父级交接真相；Orchestrator 不读取子 Agent 的 `messages.json`、`tool_log.json` 或 system/tool 快照来轮询进度。Research 是任务级单例；Review 最多执行 3 次，后续实例只能用于修复后的受控复验，不能为了审美偏好反复重审。
 
 ### 1.2 角色
 
@@ -37,7 +37,7 @@ Orchestrator 只负责：**判断模式、规划、委派、合并、验收和�
 | Material | 按附件并行 | 每个实例只处理自己的附件分片，写 `research/materials/material_NN.md` |
 | Image | 按素材量并行 | 获取或生成位图素材，返回实际路径 |
 | Slide | 新建或复杂编辑时按设计亲缘页组并行 | 只制作/重做自己的页组并完成组内像素闭环 |
-| Review | 每个任务至多 1 个；简单编辑时也是执行者 | 先诊断、后集中修复、批量重渲和最终讲稿收口 |
+| Review | 首次验收 1 个，修复后最多复验 2 次；简单编辑时也是执行者 | 先诊断、后集中修复、批量重渲和最终讲稿收口 |
 
 所有角色开工前完整读取自己的 `subagents/<role>.md`。任何选中的文件或章节出现截断提示时，续读到结束；**未被路由命中的 reference 不读**。
 
@@ -89,7 +89,7 @@ present.html
 
 无论是否读取 `fonts.md`，中文眉签、部门名、页脚、来源和元数据都不得使用等宽字体或拉丁 ALL CAPS 的疏字距：使用 `--font-sans` / `--font-serif`，字距保持 `0–0.03em`。`--font-mono`、`--tracking-caps`、`.is-latin-label` 只用于纯拉丁技术标识、代码、坐标和真实编号。
 
-同一句中文标题、结论或标签必须使用同一字体家族；强调词只通过颜色、字重、字号或下划线建立层级，禁止把其中几个字换成卡通、手写或另一套展示字体。字体选择回到场景与 Style Lock：表达型封面、hero、章节页可组织 3–4 个职责明确的角色，严谨型页面收敛到 2–3 个角色；不要把整册机械压成同一套宋体/黑体。`playful`、圆趣、手写和书法字体只有在主题与受众真正支持时启用，并在对应元素加 `.is-expressive-type` 或 `data-type-intent="expressive"`，让渲染检查确认这是有意选择。
+同一句中文标题、结论或标签必须使用同一字体家族；强调词只通过颜色、字重、字号或下划线建立层级，禁止把其中几个字换成卡通、手写或另一套展示字体。**全册字体家族总数 ≤ 3 且必须全册统一**：同一角色在每页都用同一家族，不因页面题材临时换字体；严谨型收敛到 1–2 族。字体选择服从场景与 Style Lock——中文正文/表格/页脚/眉签一律 `--font-sans`（严谨衬线可 `--font-serif`），**中文绝不放进 `--font-mono`**（IBM Plex Mono 无中文字形，会回退成卡通体）；`--font-mono` 只服务纯拉丁代码、坐标、ID。`playful`、圆趣、手写和书法字体只有在主题与受众真正支持时启用（至多占那 3 族里的 1 个点缀位），并在对应元素加 `.is-expressive-type` 或 `data-type-intent="expressive"`，让渲染检查确认这是有意选择。
 
 ### 1.6 视觉媒介优先级
 
@@ -101,7 +101,9 @@ present.html
 4. 大型流程、架构、机制、关系示意：**Canvas 绘制几何 + HTML 文字层**，或“无文字图片 + HTML 标注”；
 5. SVG：仅用于 icon、logo、箭头、标记和小型装饰。
 
-**默认禁止把手写 SVG 当作半屏/全屏主视觉或大型示意图。**除非用户明确要求矢量交付，或必须复用用户提供的准确矢量资产。详细实现见 `design-rules.md` §5 和 `layout-patterns.md` 的 Canvas diagram 章节。
+普通内容页只要存在人物、地点、产品、作品、活动、体验、自然/城市环境、故事场景或情绪画面等可见主体，优先让一张有分量的真实/生成位图成为主视觉，而不是用彩色块、图标或抽象线框替代。配图数量服从叙事，不机械凑数；但能够增加识别、证据、临场感或情绪价值的位图机会不得静默放弃。
+
+**默认禁止把手写 SVG 当作 hero、半屏/全屏主视觉或大型示意图。**SVG 只承担小型辅助图形；复杂的非位图主视觉若确需程序化表达，优先使用 Canvas 几何 + HTML 文字层。只有用户明确要求矢量交付，或必须复用用户提供的准确矢量资产时才例外。详细实现见 `design-rules.md` §5 和 `layout-patterns.md` 的 Canvas diagram 章节。
 
 ## 2. 新建 PPT
 
@@ -194,11 +196,13 @@ Style Lock 锁定的是**视觉语言与判断边界**，不是一套固定 HTML
 
 真实对象的识别与证据、场景的临场感、人物与产品的可信度、故事与情绪的锚点，都属于有效配图机会。虚构人物、概念场景、未建成空间和风格化主视觉正是生成图的适用对象，不应因其不是真实对象而改用彩色方块、抽象符号或纯 CSS 占位。“CSS 更可控”“没有用户实拍”“担心 AI 生成错误”“为了风格统一”都不能单独成为 `none` 的理由；这些问题应通过真图/生成图分流、提示词约束、统一裁切与调色解决。只有当位图确实不增加听众价值，或会比图表、Canvas 或排印更含糊时，才选择 `none`。如果一册存在多个明显可见主体，却被整体判成无位图或仅封面一张图，在冻结计划前必须重做这次扫描。这里不设图片数量配额，也不为装饰而配图。
 
-当搜图或生图能力可用时，**整册全部 `none` 或只有封面一张图属于需要证明的异常，不是默认安全路线**。数据、商业、技术、学术或代码题材也不能因此整册退回卡片墙：事实页可以用图表/Canvas，但封面、章节转场、案例、场景、愿景或结论中至少应选择两个真正能从图像获益的节点，给出可执行的搜索/生成 brief；短册则至少保证一个内容节点，而不只是封面。只有用户明确要求纯排印/纯图表，或逐页证明位图都会降低准确性与可读性时，才允许整册无位图，并在 `plan/deck.md` 写明逐页例外理由。这是防止误判的最低覆盖线，不是为了凑数；事实型真图与非证据性的氛围生成图必须明确分流。
+当搜图或生图能力可用时，**整册全部 `none` 或只有封面一张图属于需要证明的异常，不是默认安全路线**。数据、商业、技术、学术或代码题材也不能因此整册退回卡片墙：事实页可以用图表/Canvas，但封面、章节转场、案例、场景、愿景或结论中至少应选择两个真正能从图像获益的节点，给出可执行的搜索/生成 brief；短册则至少保证一个内容节点，而不只是封面。只有用户明确要求纯排印/纯图表，或逐页证明位图都会降低准确性与可读性时，才允许整册无位图，并在 `plan/deck.md` 写明逐页例外理由。这是防止误判的最低覆盖线，不是为了凑数；事实型真图与非证据性的氛围生成图必须明确分流。卡片、极简、学术、商务等风格描述不等于禁止位图，也不能作为免配图理由。只有用户原文明确要求“纯文字”“不要图片”或语义完全等价的限制时，才能把 `explicit_user_request` 作为图片豁免依据；不得根据风格标签自行推断用户拒绝图片。
+
+可见主体扫描必须同步落盘为 `plan/image-strategy.json`，供生成流程在 Slide 委派前确定性验收。存在配图机会时写入 `status: images_required`、`visible_subject_scan_complete: true` 和完整的 `image_opportunity_pages`；整册无位图时必须写入 `status: bitmap_exception`、`visible_subject_scan_complete: true`、覆盖全部计划页的 `reviewed_pages`、不少于 20 字的 `exception_reason`，以及 `explicit_user_request | pure_typography | pure_chart | wireframe | accuracy_critical` 之一的 `exception_basis`。不能用自然语言总结替代该文件。
 
 背景不等于一块纯色，也不等于每页随机换皮。学术、组会、合规、严肃评审等场景可用安静画布承托事实；产品、品牌、招商、文旅、文化、故事、课程导入、活动与大众传播等表达型场景，应主动考虑一层与主题相容的环境设计，而不是整册退回纯色：可以是有方向的柔和光场、局部光晕、低对比颗粒/网点/纸纹/地形等主题肌理、图片背景，或由 Image 统一生成的背景。光晕只有在能解释光源、主题和视觉焦点，且形状、位置与构图相关时才成立；标题后反射式复制的圆形模糊光斑仍属于无主题 glow。先确定贯穿普通内容页的基础画布家族，再选择少量相容手法形成背景语法。章节差异优先通过局部大色场、图片调色、条带或母题状态表达；只有章节页、hero、结尾或叙事确需整体换场时才更换整页画布，并在前一张或后一张保留颜色、肌理、图片处理或构图方向的承接。图片或生成背景必须进入 `image_opportunity_map` 与素材 brief，不能由 Slide 临时发明路径。避免出现数页突然像另一套 Deck、随后又无过渡切回，也避免把深藏青、霓虹蓝紫渐变或通用科技 glow 当作默认“高级感”。
 
-后续主链只有一条：`Style Lock → 全册计划 + prepare → Image 分片并行 → 素材路径一次回填 → Slide 页组并行 → 唯一 Review → build`。前一节点的真相源未冻结，不启动依赖它的下游；互不依赖的同层任务一次并行派出。
+后续主链只有一条：`Style Lock → 全册计划 + prepare → Image 分片并行 → 素材路径一次回填 → Slide 页组并行 → Review 诊断/有限返修 → 讲稿同步 + build → Review 查看 build 后最终像素并返回合同`。前一节点的真相源未冻结，不启动依赖它的下游；互不依赖的同层任务一次并行派出。`build` 可能裁剪字体、更新 `base.css` 并重渲全册，因此 build 前的 Vision 只能用于诊断，不能作为最终像素证据。
 
 ### 阶段 3：全局规划与字体前置
 
@@ -221,21 +225,21 @@ Style Lock 锁定的是**视觉语言与判断边界**，不是一套固定 HTML
 python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py prepare . --expected <总页数>
 ```
 
-规划冻结条件：事实、页序、屏显文案、视觉媒介、逐页配图机会、素材 brief、背景处理、来源、讲稿、页型和字体全部确定，并已通过内容充分性、屏显语义去重与 screen-copy firewall。冻结前专门反证所有 `image_opportunity: none`：若页面已经有可视化的主体或场景，不能只用“代码更可控”将它排除。屏显文案或字体 token 变化时，先同步计划再重跑 `deck.py prepare`。
+规划冻结条件：事实、页序、屏显文案、视觉媒介、逐页配图机会、素材 brief、背景处理、来源、讲稿、页型和字体全部确定，`plan/image-strategy.json` 已写入，并已通过内容充分性、屏显语义去重与 screen-copy firewall。冻结前专门反证所有 `image_opportunity: none`：若页面已经有可视化的主体或场景，不能只用“代码更可控”将它排除。屏显文案或字体 token 变化时，先同步计划再重跑 `deck.py prepare`。
 
 逐页计划还必须完成一次空间预演与视觉验收预演：写清主视觉与文字各占哪块、主信息如何使用安全区、剩余空间为什么存在，以及观众从最终像素应读出哪些对象、方向、领域证据和结论。`deck.md` 与逐页计划的媒介不能互相矛盾。普通内容页若预演结果是“主体缩在中间、外围大片无归属空白”“只能靠小字塞下”或“只能用通用几何代替领域证据”，先改计划，不把问题留给 Slide。章节过渡页则预演“主信息团 + 视觉对重 + 留白职责”：内容保持简洁，但不能只在局部放一小团文字、让其余画布成为未设计的纯空白。
 
 ### 阶段 4：素材与页面制作
 
-1. 汇总所有被判定为真实图或生成图的图片 brief，再启动 Image subagent；每个 goal 显式带上稳定 `group_id`、`response_language` 与 `deliverable_language`。只要计划中存在有效配图机会，就不能静默跳过 Image 阶段；同一视觉配方且能在一张联系表中共同审清的素材归入同一分片，多张生成图在同一工具回合并行提交。
-2. 先把 `attachment_visual_map` 中 must-show / reuse 的图片复制并登记来源，再交给对应 Image 分组；论文命名 Figure 先由 Image 使用 `deck.py material-figure` 从页图生成独立、可追溯的 Figure 裁图，整页 PNG 只作为定位上下文。每个 Image 分组将候选路径绑定到稳定 `asset_id`，由 `deck.py asset-contact` 生成一张带 ID 的素材联系表，默认只做一次整组 Vision；只有被标红、要求抠图、比例可疑或主体完整性无法从缩略图判断的素材才打开单图复核。Image 用 `asset-review` 写回最终状态后，Orchestrator 只按 `ready` 的 `asset_id → actual path + origin + crop_contract` 回填逐页计划；候选、被替换与废弃图片不算正式素材。`assets/catalog.json` 必须保留下载 URL、生成模型、用户附件路径和派生关系。逐页图片先锁定 `presentation: subject-only | framed-scene | full-bleed | evidence-crop`：任何要悬浮、跨色场叠放或作为独立角色/物件的图都属于 `subject-only`，必须由 Image 完成透明检查、主体抠图、最终 Alpha 检查与必要的单图 Vision，再回填可用的 `*-cutout.png`；普通 RGB 图不得作为透明资产返回 `ready`。带背景图片只能作为有意的画框场景、满幅裁切或证据裁图，不能把其白底/奶油底矩形偶然贴到另一种画布上。Slide 不临时去背，也不用 CSS mask/multiply 冒充。映射确有问题时交回同一个 Image 复核。失败素材先换可行的真实图或生成图路线，确实不可得时才改为 Canvas 或排版降级，并写清原因，不留占位。Slide 启动前，所在页组需要的图片路径与裁切合同必须已经确定。
+1. 汇总所有被判定为真实图或生成图的图片 brief，再启动 Image subagent；每个 goal 显式带上稳定 `group_id`、`response_language` 与 `deliverable_language`。**第一次 Image 委派前**，每个 `plan/slide_NN.md` 的唯一 `## 视觉实现` 都必须已有一条完整单行机器字段 `- image_opportunity: <枚举>`；有位图页另用同级独立行写 `- presentation: <四枚举之一>`，不得写成空的 `image_opportunity:` 父块，不得把 `full-bleed` / `framed-scene` 填进 `image_opportunity`，也不得把 `split-media` 等 layout 值填进 `presentation`。缺字段时直接修计划并重试，不搜索或修改运行时代码。只要计划中存在有效配图机会，就不能静默跳过 Image 阶段；若计划需要图片但当前没有 Image Worker，必须重新规划为真正成立的非位图表达，或补派 Image Agent，不能直接进入完成状态。同一视觉配方且能在一张联系表中共同审清的素材归入同一分片，多张生成图在同一工具回合并行提交。Image 与 Slide 不得在同一次 `delegate_task` 中派出：先完成并验收素材，再启动页面制作。
+2. 先把 `attachment_visual_map` 中 must-show / reuse 的图片复制并登记来源，再交给对应 Image 分组；论文命名 Figure 先由 Image 使用 `deck.py material-figure` 从页图生成独立、可追溯的 Figure 裁图，整页 PNG 只作为定位上下文。每个 Image 分组将候选路径绑定到稳定 `asset_id`，由 `deck.py asset-contact` 生成一张带 ID 的素材联系表，默认只做一次整组 Vision；只有被标红、要求抠图、比例可疑或主体完整性无法从缩略图判断的素材才打开单图复核。Image 用 `asset-review` 写回最终状态后，Orchestrator 只按 `ready` 的 `asset_id → actual path + origin + crop_contract` 回填逐页计划；候选、被替换与废弃图片不算正式素材。`assets/catalog.json` 是唯一素材真相源，必须保留下载 URL、生成模型、用户附件路径和派生关系；Image 的自然语言总结不能代替 catalog。逐页图片先锁定 `presentation: subject-only | framed-scene | full-bleed | evidence-crop`（这是位图的展示/背景处理合同，**只允许这四个枚举**；`split-media`/`right-half`/`cards`/分屏等是版式不是 presentation，放到 `layout`；**无位图页完全省略 presentation**，不写 `无`/`none` 占位）：任何要悬浮、跨色场叠放或作为独立角色/物件的图都属于 `subject-only`，必须由 Image 完成透明检查、主体抠图、最终 Alpha 检查与必要的单图 Vision，再回填可用的 `*-cutout.png`；普通 RGB 图不得作为透明资产返回 `ready`。带背景图片只能作为有意的画框场景、满幅裁切或证据裁图，不能把其白底/奶油底矩形偶然贴到另一种画布上。Slide 不临时去背，也不用 CSS mask/multiply 冒充。映射确有问题时交回同一个 Image 复核。失败素材先换可行的真实图或生成图路线，确实不可得时才改为 Canvas 或排版降级，并写清原因，不留占位。Slide 启动前，Image 必须有 `status: ready` 的完成合同，catalog 中所有计划 `asset_id` 都必须为 `ready`、实际文件存在，且路径与裁切合同已经回填逐页计划。
 3. 一个 Production group 委派一个 Slide，可并行执行；goal 的首行必须精确写成 `Slide Group <group_id> [NN,NN]:`，例如 `Slide Group bookends [01,20]:`。页码所有权以已冻结的 `production_group` 为准；不用“负责封面和结尾”、“第一组页面”等叙述取代组 ID 与标准页码头。显式带上 `response_language`、`deliverable_language` 与该组 `boundary_handoff`。不得为了提高并发把已经冻结的多页 group 再拆成“一页一个 Slide”；只有计划本身确实定义为单页组时才单页委派。同组必须同时满足叙事亲缘、设计亲缘和制作负荷相容；复杂 Canvas、独立数据图或重图像合成页在没有真正共享构图系统时应单独成组。Grouping 提供的是共享设计记忆，不是批量降精度：同一个 Slide 按组内页序串行完成每页闭环。
-4. Slide 先读取 Style Lock 与组合同，然后对每一页依次执行“完整首稿 → 单页渲染 → `vision_analyze` → 合并修复 → 重渲复看”；当前页达到 ready 后才进入下一页。全部页面完成后，再批量渲染本组并查看组内全部最终 PNG，修正亲缘性漂移或机械重复。封面、每张章节页、结尾页都必须完成自己的单页闭环。首次看图后的“合并修改 → 重渲 → 复看”记为一轮 refine；每页最多 1 轮，把所有已确认硬伤合并修复。复验后仍有真实裁切、遮挡、不可读或运行错误则 `blocked`；仅有 `cjkTypography`、crowdedness、bbox/contrast 候选、轻微换行、标点或审美偏好时记录为 advisory 并返回 ready。最后一次修改后没有重新渲染和看图，不得返回 ready。
-5. 等待全部页面完成后再启动唯一 Review。新建或复杂编辑过程中不得额外委派 `simple_edit`、`review-fix` 或第二个 Review；某页在 Slide 阶段暴露的问题交回其所属 Slide Group 合并修复，或记入最终 Review 的问题账本。
+4. Slide 先读取 Style Lock 与组合同，然后对每一页依次执行“完整首稿 → 单页渲染 → `vision_analyze` → 最多一次合并修复 → 重渲复看”；当前页达到 ready 后才进入下一页。全部页面完成后，再批量渲染本组并查看组内全部最终 PNG，确认亲缘性与明显回归，但不为审美偏好开启新循环。封面、每张章节页、结尾页都必须完成自己的单页闭环。首次看图后的“合并修改 → 重渲 → 复看”记为一轮 refine，每页最多 1 轮；仍有真实硬伤时改用更稳定的结构或返回 blocked。最后一次修改后没有重新渲染和看图，不得返回 ready。
+5. 等待全部页面完成后再启动首次 Review。新建或复杂编辑过程中不得额外委派 `simple_edit` 或 `review-fix` 角色；Orchestrator 不得追逐 `cjkTypography`、`crowded`、bbox/contrast 候选、轻微换行/标点等 advisory，也不得在 Review 前开启审美清门循环。Review 发现有新鲜像素/DOM 证据的真实硬伤时，只交回原所属 Slide Group；每组最多返修 2 次，每次失败由运行时恢复该组最后一次已看过的版本。返修后才可启动下一次 Review，Review 总计最多 3 次。
 
 ### 阶段 5：全册 Review 与交付
 
-唯一 Review 的 goal 必须以以下语言合同开头，再写具体诊断范围：
+每次 Review 的 goal 必须以以下语言合同开头，再写具体诊断范围：
 
 ```text
 Review:
@@ -248,13 +252,14 @@ mode=final_review
 
 1. **完整诊断：**先看 overview，再按 `review-contact.json` 分批看完全部联系表和必要单页；每批将覆盖页码与发现记入同一 `_trace/review-issues.md`。全册覆盖并冻结账本前禁止修改或渲染；不因 Deck 页数较长而跳过后续批次。
 2. **内容保真核验：**任务含附件或使用了 Research 时，在像素修改前把每页屏显事实与 `grounded-knowledge.md` 对照；有附件时再对照 Material 摘要及 coverage ledger，并写 `_trace/content-fidelity.md`。数字、名称、日期、单位、产品身份、原话或关系无法追溯、自相矛盾时修正或 blocked。生成图只能承担概念/氛围表达；若用于具名真实产品、人物或案例识别，页面必须明确标“概念示意”，不能作为事实证据。仅当既无附件、又无 Research 和高风险外部事实时，`content_fidelity` 才可为 `not-applicable`。
-3. **集中修复：**唯一 Review 既诊断也直接修复；当前文件与已有素材能解决的问题不得只上报给 Orchestrator。按共同根因先全局、后局部，全部修改结束后才统一批量渲染。这一整批“修改 → 批量渲染 → focus 复验”记为 Review 的 1 轮 refine。任何 HTML/`base.css` 修改都会使旧 PNG 失效，重渲前禁止再次调用 Vision；Canvas/SVG/HTML 叠加页必须同步修正 CSS 尺寸、Canvas 属性、SVG `viewBox`、JS 坐标与节点锚点，不能只放大外容器。机检中的 `boxoverflow`、bbox 相交和装饰相交仅为定位候选；若新鲜像素没有真实遮挡、裁切或不可读，不得为清除告警缩字、压缩主体或删除有构图作用的元素。
-4. 改过 base.css/字体时全册 batch；只改局部时 page batch。
-5. 生成一次 focus 联系表复验。Review 最多只做 1 轮 refine，把所有已确认硬伤合并修复；不得为 advisory 开启修改，也不得开启第二轮。复验后仍有真实硬伤则 `blocked`，仅有 advisory 时记录后返回 `ready`。
-6. 像素定稿后同步讲稿。
-7. Review 返回 `ready` 且已成功 build 后，Orchestrator 只读取其结构化结论并确认交付文件存在；不得再次渲染、build、查看同一 PNG/contact sheet 或重新诊断相同问题，也不得追逐 `cjkTypography`、crowdedness、bbox/contrast 候选、轻微换行、标点或审美偏好等 advisory。只有 Review 后发生新的页面修改，才回交同一个 Review 复验。
+   Review 停滞收口时允许补齐或更新的正式产物只有 `_trace/review-issues.md` 与 `_trace/content-fidelity.md`；运行时不得禁止写入最终验收合同明确要求的这两份文件，也不得在收口阶段允许继续修改页面。
+3. **集中修复：**Review 既诊断也直接修复本次边界内可安全解决的问题；当前文件与已有素材能解决的问题不得只上报给 Orchestrator。按共同根因先全局、后局部，全部修改结束后才统一批量渲染。这一整批“修改 → 批量渲染 → focus 复验”记为 Review 的 1 轮 refine。任何 HTML/`base.css` 修改都会使旧 PNG 失效，重渲前禁止再次调用 Vision；Canvas/SVG/HTML 叠加页必须同步修正 CSS 尺寸、Canvas 属性、SVG `viewBox`、JS 坐标与节点锚点，不能只放大外容器。机检中的 `boxoverflow`、bbox 相交和装饰相交仅为定位候选；若新鲜像素没有真实遮挡、裁切或不可读，不得为清除告警缩字、压缩主体或删除有构图作用的元素。
+4. 改过 base.css/字体时全册 batch；只改局部时 page batch。该批渲染用于确认修复没有退化，不是最终交付证据。
+5. 生成一次 focus 联系表确认变化页。单个 Review 只做 1 轮 refine；仍有可见硬伤时返回 `blocked`，由 Orchestrator 将有证据的硬伤交回原页组。原页组保留最后验证版、做一次合并修复并重渲复看；新版退化或仍未解决时恢复验证版。修复后启动新的 Review 复验，最多形成 3 次 Review，不新增审美目标。
+6. 修复确认后先同步讲稿，再执行一次 `deck.py build`。随后重新生成 `renders/review-contact.json` 与最终联系表，并用 Vision 覆盖 build 后的全部最终像素；若 build 改变 `base.css`、字体或任一页面渲染，build 前看过的 PNG 全部视为过期。最终看图后只允许更新 `_trace/review-issues.md` / `_trace/content-fidelity.md` 与返回合同，不得再改页面、渲染或 build。
+7. Review 返回 `ready` 后，Orchestrator 只读取其结构化结论并确认交付文件存在；不得再次渲染、build、查看同一 PNG/contact sheet 或重新诊断相同问题。只有 Review 后发生新的页面修改，才启动下一次受控 Review 复验。
 
-Review 超时、返回 `blocked`、缺少最终像素复验或没有自然返回合同时，整项任务即未通过质量门。Orchestrator 不得跳过 Review 后自行 build、把旧渲染当作成稿或宣告成功。
+Review 超时、返回 `blocked`、缺少最终像素复验或没有自然返回合同时，先进入有限恢复流程，而不是立即把整项任务判失败。达到 3 次 Review 或每个受影响页组 2 次返修预算后停止继续改页，保留 `_trace/review-issues.md`，恢复每组最后验证版并执行确定性 build。只要全部 slide、非空最终渲染、`speech.md` 与可打开的 `present.html`/交付包存在，任务以“完成（有待改进）”交付并携带 warnings；只有缺页、渲染缺失/空白、播放器或交付包无法构建/打开等不可用技术故障才判失败。
 
 Review 不只查“有没有溢出”，还要比较全册设计兑现：封面是否具有统治性焦点和必要层级，章节页是否既有亲缘性又体现章节推进，结尾是否回应开场；普通页是否在投影字阶下充分使用画布并形成明确阅读路径；每个章节边界是否仍属于同一基础画布家族，整页换场是否有明确的进入与退出承接；屏显是否泄漏内部规划字段、来源、文件名或无听众价值的伪元数据。未实际调用 `vision_analyze` 查看最终像素时必须 blocked。
 
@@ -262,7 +267,7 @@ Review 不只查“有没有溢出”，还要比较全册设计兑现：封面�
 python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/deck.py build . --expected <总页数>
 ```
 
-只有 Review ready、最终像素已看、字体与 render freshness 通过、`speech.md` 对齐且 `present.html` 构建成功，才能交付。
+Review ready 时交付为 `ready`。Review 最终仍有硬伤但全部页面、渲染、讲稿与 `present.html` 可用时，以 `needs_improvement` 交付并展示问题账本；不得因为 advisory、子 Agent 文本收尾或 Review 合同不完美丢弃可用成稿。
 
 ## 3. 编辑 PPT
 
@@ -289,8 +294,8 @@ Review：
 2. 一次列完本次修改项；
 3. 读取目标页计划与 HTML，集中修改；
 4. 更新受影响的计划/讲稿；
-5. 用 `render.py --batch --pages` 一次重渲；
-6. 看 focus 联系表并返回 ready/blocked。
+5. 用 `render.py --batch --pages` 一次重渲并看 focus，确认修改不退化；
+6. 同步讲稿并执行 `deck.py build`，再重新生成 focus、查看 build 后最终像素并返回 ready/blocked；最终看图后不再修改或 build。
 
 不派 Slide、Image、Research 或第二个 Review。
 
@@ -321,10 +326,10 @@ Review：
 - AI 生成图不承载需要准确呈现的文字；文字放 HTML 层。
 - SVG 只做小元素，不做大型结构图或主视觉。
 - `slides/` 只保留正式 `slide_NN.html`，不放备份或临时页。
-- 页面固定骨架、页脚安全区、最小字号、对比度与无溢出是硬门。
+- 页面固定骨架、页脚安全区、最小字号、对比度与无溢出是硬门。听众阅读的正文不得低于 20px，注释、来源和辅助说明不得低于 18px；若字体 token 规定了更大值，以更大值为准。内容放不下时减少卡片数量、删减重复屏显文字、调整信息层级或拆页，不得继续缩字。
 - 内部规划标签、来源、文件路径、制作状态和无听众价值的伪元数据不得出现在屏显内容中。
 - 最终判断看 PNG；修改后未重渲、未看新像素，不得声称完成。
-- Review 每个任务只允许一个实例；blocked 不得通过另派 Review 绕过。
+- Review 最多 3 个受控实例；只有页面实际修改并重渲后才允许复验。达到预算后停止返工并带 warnings 交付可用成稿。
 
 ## 5. 确定性脚本
 

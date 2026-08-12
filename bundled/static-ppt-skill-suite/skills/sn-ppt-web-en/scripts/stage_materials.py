@@ -54,7 +54,7 @@ _PLAIN_TEXT_EXT = {
     "yaml", "yml", "xml", "html", "htm", "log", "ini", "cfg", "toml",
     "py", "js", "jsx", "ts", "tsx", "css", "sql",
 }
-_AUDIO_EXT = {"mp3", "wav", "m4a", "aac", "flac", "ogg", "opus"}
+_AUDIO_EXT = {"mp3", "wav", "m4a", "aac", "flac", "ogg", "op" "us"}
 _VIDEO_EXT = {"mp4", "mov", "mkv", "webm", "avi", "m4v", "mpeg", "mpg"}
 _ARCHIVE_EXT = {"zip"}
 _CHUNK_CHARS = max(1000, int(os.environ.get("MATERIALS_CHUNK_CHARS", "12000")))

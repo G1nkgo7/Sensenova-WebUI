@@ -8,6 +8,15 @@
 
 完成意味着：本组每页服从逐页计划，组内有共同设计 DNA 和明确变化，所有最终 PNG 已真实查看，硬伤清零或被如实标记为 blocked。
 
+### ★ 上屏红线（面向观众，违反即硬伤，优先级高于任何版式偏好）
+
+PPT 页面和讲稿都是**给观众看/听的成品**，只放观众需要的信息。以下三条是硬红线，写 HTML 时逐条自检：
+
+1. **机械来源脚注不上屏**：不要为了"严谨"在每页页脚/角落挂 `来源：…`、`出处`、`Source:`、`数据来源` 之类的溯源脚注；事实溯源写进 `speech.md`（讲稿）。**可以上屏**的是面向观众的正常内容：名人名言的**简短署名**（如「— 鲁迅」）、人物页的姓名/头衔、以及计划明确声明的**独立 references 页**上的标准引文。区别在于：内容性的引文/署名服务观众，机械的溯源脚注是给作者自查的。
+2. **内部隐藏状态绝不上屏**：文件路径（如 `research/research.md`、`plan/…`）、章节锚点（`§二.3`）、证据 ID、production group、assumption、制作状态、伪档案号——这些是内部生产信息，**一个字都不能进 HTML**。把 `research/research.md §二.4` 当"来源"印到页面上是严重违规。
+3. **首页/结尾页/过渡页不强加正文页家具**：封面（`.slide--cover`）、结尾（`.slide--cover.slide--closing`）、过渡/章节页**默认不放** `.slide-footer`、`.page-no` 页码、`border-top` 分隔横线、机构备注、`SCENE/COVER/END` 标签。这些特殊页排"一个统治性焦点 + 大留白"，页脚页码是正文页家具，放到首尾页一眼廉价。页码/页脚只属于普通内容页。
+
+
 ## 2. 输入、读取与写入边界
 
 完整读取：
@@ -23,6 +32,8 @@
 
 逐页计划把素材声明为论文 `figure-crop` 时，只能引用 catalog 中 `derivative_kind: material_figure_crop` 的正式资产。不得把整页论文 PNG 缩进图片框，再用 `object-fit/object-position/overflow:hidden` 假装已裁出 Figure；需要页面原貌时必须由计划明确声明 `page-facsimile`，且页面文案不能把它误标为 Figure 本体。
 
+你没有搜图、生图或网络取图权限。只能使用 `assets/catalog.json` 中状态为 `ready`、且已按稳定 `asset_id` 回填到本组逐页计划的图片；不得猜路径、复用候选/废弃素材、临时调用图片工具或自行新增图片。计划要求的正式素材缺失、路径不存在或 crop contract 未冻结时，返回 `blocked` 交回 Image/Orchestrator，不得用 SVG、彩色块或占位图绕过。
+
 只写本组 `slides/slide_NN.html` 和 `renders/slide_NN.png`。不改事实、计划、`base.css`、讲稿或其他页组。
 
 按 `render.py` 的公开命令、stdout、最终 PNG 和 `render.json` 工作；不要读取或调试 `render.py` / `deck.py` 实现。调试截图放系统临时目录，或直接覆盖本页规范 `renders/slide_NN.png`，不得在 `renders/` 留下 `*_test.png`、`*_new.png` 等非交付文件。
@@ -36,14 +47,14 @@
    - `boundary_handoff`：本组进入前、组内首尾页和离开后的画布家族、明度、色场/图片处理与母题状态。
    `design_dna` 来自 Style Lock，锁的是视觉语言而非固定模板；上一页是设计亲缘参考，不是下一页的几何模板。
 2. 按 `pages` 顺序逐页工作。每页先确认职责、第一眼焦点、阅读路径、逐字文案、**主要视觉载体**、实际素材路径和“视觉验收”，再根据 `spatial_budget` 完成版面草图。使用位图时先读取该素材的 `crop_contract`；把焦点、必须保留部位和允许裁边落实为槽位比例、fit 与 `object-position`，不能默认 `center center + cover`。用三句话预演：观众先看到什么、从视觉读出什么关系、最后得到什么结论。主焦点必须占据与其重要性相称的面积，文字与证据视觉沿清晰轴线分布，剩余空间必须有用途。`dense` 页若主信息只在半张画布或一条窄带，必须在首稿里重做比例，不能用“留白”解释未设计区域。大边框、等高卡和空侧栏即使铺满画布，也不等于内容完成；短文若只贴在容器上沿/下沿、中部长期闲置，应优先放大并使用计划中的真实图片、界面、图表或解释视觉，或缩小/合并容器、改变构图，不得散布无意义小图标和装饰来填空。落版前做一次可见文案清点：横向比较标题、kicker / subtitle、图片角标、badge、callout、图例和页脚；完全相同或只换说法的状态标签只保留信息与构图作用最强的一处，其他区域应增加对象、原因、变化或结果。可以省略计划中语义完全重复的低价值节点，但不得改事实或自创文案。HTML 只使用逐页计划的 `## 最终屏显文案`，且不使用 emoji / Unicode 图标（如 `👀 ✋ 💡 ✨ ★ ✦`）；需要图标时用本地小 SVG、CSS 形状或文字。页面职责、受众、主体、目标、production group、视觉验收、素材路线、来源、文件路径、假设和讲稿都属于内部生产信息，不得上屏。
-3. 一次完成当前页 HTML 首稿。先确认 `base.css` 如何拥有正文区高度：`.slide-body` 是外层安全框，若它由 absolute 的 `top + bottom` 定高，页面样式不得再设置 `height: 100%` / 固定高度；若它由 flex 的 `flex: 1` 占满余量，也不得再写 `height: 100%`。页面类只改变正文区内部的 grid/flex、轨道和间距；需要满高布局时，在 `.slide-body` 内增加 `min-height: 0; height: 100%` 的 inner stage，不覆盖外层的 position、top/bottom、height 或 overflow。正文从 `--fs-body` 起，辅助说明从 `--fs-caption` 起；不要先写 11–18px 小字再期待 Review 放大。正常字阶放不下时，优先减少重复说明、改变分栏/层级或把次要解释留给讲稿；不要靠缩字解决。
-4. 只渲染当前页，并实际调用 `vision_analyze` 看该页 PNG。第一次 Vision 必须独立、开放式复述：第一眼焦点与阅读路径；主要视觉载体是否有足够分量；文字、证据视觉和空白分别位于哪里、各自承担什么作用；是否出现“外框铺满但卡片/侧栏内部空洞”、主体被压在半张画布或窄带、应有图片退化成小图标。对位图还要对照 `crop_contract` 复述实际看见的主体：人脸/头顶/手势、产品轮廓/Logo、作品核心对象或证据标签是否仍完整，裁掉的是否仅为允许损失的背景；不能把“图片铺满了”当作裁切正确。随后再检查页面对象、方向、领域证据、结论、遮挡、溢出与字阶。计划为 `dense` 却只占半张画布，或主体图带偶然矩形背景贴在异色画布上，均属于首轮必修。在这次像素判断返回前，不得同回合读取 `render-issues.json`，也不得把“A 是否与 B 重叠”等 bbox 候选写进 Vision 问题。质量判断顺序固定为**新鲜最终 PNG / Vision → DOM 与 computed geometry → 机检候选**；`boxoverflow` 或 bbox 相交本身不是改页命令。先得到不受 lint 锚定的视觉结论，再按需读取结构化诊断并与像素对照：
+3. 一次完成当前页 HTML 首稿。先确认 `base.css` 如何拥有正文区高度：`.slide-body` 是外层安全框，若它由 absolute 的 `top + bottom` 定高，页面样式不得再设置 `height: 100%` / 固定高度；若它由 flex 的 `flex: 1` 占满余量，也不得再写 `height: 100%`。页面类只改变正文区内部的 grid/flex、轨道和间距；需要满高布局时，在 `.slide-body` 内增加 `min-height: 0; height: 100%` 的 inner stage，不覆盖外层的 position、top/bottom、height 或 overflow。正文从 `--fs-body` 起且不得低于 20px，注释、来源和辅助说明从 `--fs-caption` 起且不得低于 18px；token 更大时遵守更大值。正常字阶放不下时，优先减少卡片数量、删除重复屏显文字、改变分栏与信息层级、拆页，或把次要解释留给讲稿；不得继续缩字解决。
+4. 只渲染当前页，并实际调用 `vision_analyze` 看该页 PNG。第一次 Vision 必须独立、开放式复述：第一眼焦点与阅读路径；主要视觉载体是否有足够分量；文字、证据视觉和空白分别位于哪里、各自承担什么作用；是否出现“外框铺满但卡片/侧栏内部空洞”、主体被压在半张画布或窄带、应有图片退化成小图标。对位图还要对照 `crop_contract` 复述实际看见的主体：人脸/头顶/手势、产品轮廓/Logo、作品核心对象或证据标签是否仍完整，裁掉的是否仅为允许损失的背景；不能把“图片铺满了”当作裁切正确。随后再检查页面对象、方向、领域证据、结论、遮挡、溢出与字阶。不要只判断元素是否仍在整页画布内。逐个检查标题区、正文卡片、信息面板、表格单元格和页脚的边界。任何子元素越过其视觉所属容器的描边、背景或内边距，即使仍在画布内，也属于真实溢出。特别检查每个容器的底部边界，并明确回答“容器内完整 / 越过底边 / 被裁切”。计划为 `dense` 却只占半张画布，或主体图带偶然矩形背景贴在异色画布上，均属于首轮必修。在这次像素判断返回前，不得同回合读取 `render-issues.json`，也不得把“A 是否与 B 重叠”等 bbox 候选写进 Vision 问题。质量判断顺序固定为**新鲜最终 PNG / Vision → DOM 与 computed geometry → 机检候选**；`boxoverflow` 或 bbox 相交本身不是改页命令。先得到不受 lint 锚定的视觉结论，再按需读取结构化诊断并与像素对照：
 
    ```bash
    python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/render.py --batch . --pages NN
    ```
 
-5. 一次列全当前页问题并合并修改，随后重渲、复看；每页最多 1 轮 refine。若新 PNG 仍有真实硬伤，恢复最佳版并改用更简单稳定的结构；仍无法清除则 `blocked`，不得开启第二轮微调。`cjkTypography`、`crowded`、bbox/contrast 候选、轻微换行与审美偏好均为 advisory，除非新鲜像素或 DOM 证明不可读、真实裁切/遮挡或错义，否则不得触发返修或阻止 ready。最后一次修改必须由新像素验证。
+5. 一次列全当前页问题并合并修改，随后重渲、复看。“首稿 → 首次渲染 → 看图”是初始验收，不算 refine；之后最多执行 **1 轮**“基于已看像素的合并修改 → 重渲 → 复看”。若复看提出了与上一轮相反或全新类别的硬伤，必须先对当前新 PNG 再做一次中性开放式确认；单次诱导式 yes/no 结论不能触发结构性 CSS 修改。结构性改动必须由两次一致的新鲜像素判断，或由像素与客观 DOM / computed geometry 证据共同支持；问题类别发生漂移、证据互相矛盾或新版整体退化时，立即恢复已验证基线，不继续追随最新一句 Vision 描述。裁切、底部消失或页脚冲突的诊断顺序固定为：外层 `.slide-body` 的高度所有权与 computed box → 内层 grid/flex 轨道及 `min-height` → 子元素内容量。不得先连续缩卡片、字号和 gap，也不得用主容器 `overflow: hidden` 把超出内容藏掉。若这一轮后新 PNG 仍有真实硬伤，恢复已验证的最佳版并改用更简单稳定的结构；仍无法清除则如实 `blocked`，不得开启第二轮坐标、字号、线条或装饰微调。`cjkTypography`、`crowded`、bbox/contrast 候选、轻微换行和审美偏好只是 advisory，除非新鲜像素或 DOM 明确证明发生不可读、真实裁切/遮挡或错义，否则不得触发返修或阻止 ready。最后一次修改尚未被新像素验证时不得进入下一页。
 6. 当前页 ready 后，把已实现的焦点、标题锚点、图片处理、图形状态和下一页应延续/变化的内容保留在本次上下文中，再进入下一页；不创建额外交接文件。
 7. 本组全部页面逐页完成后，再批量渲染本组并实际查看组内全部最终 PNG，检查设计亲缘、节奏、重复几何和突兀漂移：
 
@@ -51,7 +62,7 @@
    python ${SKILL_DIR:-skills/sn-ppt-web}/scripts/render.py --batch . --pages NN,NN,NN
    ```
 
-   组末调整若改变任何页面，必须重渲并复看变化页；不能用组末总览替代此前的单页验收。
+   组末总览只用于确认亲缘性与明显回归，不开启新的审美返修循环。只有发现真实硬伤时才可做一次组级合并修复，并必须重渲、复看变化页；不能用组末总览替代此前的单页验收。
 
 ## 4. 组内关系
 
@@ -68,7 +79,7 @@
 
 ## 5. 页面与媒介规则
 
-普通页 root 直下使用 `.slide-title`、`.slide-body`、`.slide-footer`；封面用 `.slide--cover`，结尾用 `.slide--cover.slide--closing`，满铺页用 `.slide--bleed`。结尾把主张、短支撑和视觉锚点放进 `.closing-stage > .closing-core`：没有明确视觉配重时，让整个信息团水平、垂直光学居中；有明确 Hero 或图形配重时可以非对称，但必须在像素中形成稳定平衡。不得用 `justify-content:flex-start` 把结尾默认钉在顶部。正文用 grid、flex 或 arch flow；absolute 只用于 decor、scrim、watermark 等托底层，不拼正文。
+普通页 root 直下使用 `.slide-title`、`.slide-body`、`.slide-footer`；封面用 `.slide--cover`，结尾用 `.slide--cover.slide--closing`，**章节/过渡页用 `.slide slide--cover slide--section`**（满铺过渡再叠 `.slide--bleed`），满铺内容页用 `.slide--bleed`。⛔ 章节/过渡页只用标准的 `.slide--section`，**严禁自造 `.slide--divider` / `.slide--transition` 等类**（计划里的 `dividers` 是负责过渡页的 Slide 页组名，不是 CSS 类）。结尾把主张、短支撑和视觉锚点放进 `.closing-stage > .closing-core`：没有明确视觉配重时，让整个信息团水平、垂直光学居中；有明确 Hero 或图形配重时可以非对称，但必须在像素中形成稳定平衡。不得用 `justify-content:flex-start` 把结尾默认钉在顶部。正文用 grid、flex 或 arch flow；absolute 只用于 decor、scrim、watermark 等托底层，不拼正文。
 
 主信息要使用正文区，而不是停在中间一小团：表格、矩阵、时间轴、流程图和成组卡片默认横向撑满安全区，并让列宽/轨道承担可用空间。页面把 `.slide-body` 改成 grid 时显式使用 `justify-content:stretch`；只在有明确非对称构图理由时使用窄版。不要把“外围大空白 + 中央拥挤”误当成居中设计。
 
