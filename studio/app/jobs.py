@@ -571,7 +571,7 @@ async def _process(deck_id):
     limits = seed.get("runtime_limits")
     if not isinstance(limits, dict):
         limits = service_config.generation_limits(row["user_id"])
-    token_budget = str(limits.get("max_tokens") or 40960)
+    token_budget = str(limits.get("max_tokens") or 65536)
     for token_env in (
         "MAX_TOKENS",
         "SUBAGENT_MAX_TOKENS",

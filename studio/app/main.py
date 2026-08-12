@@ -34,7 +34,7 @@ os.umask(0o022)
 # Keep every generation backend on one explicit per-turn completion budget.
 # This must run before importing ``dynamic`` because its runtime reads
 # STUDIO_MAX_TOKENS at module import time.
-_AGENT_MAX_TOKENS = os.environ.get("STUDIO_AGENT_MAX_TOKENS", "40960")
+_AGENT_MAX_TOKENS = os.environ.get("STUDIO_AGENT_MAX_TOKENS", "65536")
 for _token_env in (
     "MAX_TOKENS",
     "SUBAGENT_MAX_TOKENS",
@@ -2029,7 +2029,11 @@ def deck_livefeed(deck_id: int, user=Depends(require_user), con=Depends(get_db))
     if not row:
         raise HTTPException(status_code=404, detail="deck 不存在")
     payload = trace.livefeed(str(engine.log_path(deck_id)), run_dir=row["run_dir"])
-    payload["specialist_artifacts"] = trace.specialist_artifacts(row["run_dir"])
+    # A workspace is reused by in-place revisions. Keep this turn's process
+    # feed scoped to the Agents that actually appear in its current job log.
+    payload["specialist_artifacts"] = trace.scoped_specialist_artifacts(
+        row["run_dir"], payload.get("agents", {}).keys()
+    )
     return payload
 
 
@@ -2059,7 +2063,9 @@ def deck_turn_feed(
 
     if revision_no == current_revision:
         payload = trace.livefeed(str(engine.log_path(deck_id)), run_dir=row["run_dir"])
-        payload["specialist_artifacts"] = trace.specialist_artifacts(row["run_dir"])
+        payload["specialist_artifacts"] = trace.scoped_specialist_artifacts(
+            row["run_dir"], payload.get("agents", {}).keys()
+        )
         return payload
 
     archive = (

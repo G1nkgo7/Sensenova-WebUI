@@ -90,11 +90,46 @@ def _flag_default(name: str, default: bool) -> bool:
     return raw.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
-def _presenter_runtime_ready(normalize_python: Path, fonts_dir: Path) -> bool:
+def _font_has_weight_axis(
+    engine_python: Path,
+    path: Path,
+    minimum: float,
+    maximum: float,
+) -> bool:
+    probe = (
+        "from fontTools.ttLib import TTFont; import sys; "
+        "f=TTFont(sys.argv[1], lazy=False); "
+        "a=next((x for x in f['fvar'].axes if x.axisTag=='wght'), None) "
+        "if 'fvar' in f else None; "
+        "raise SystemExit(0 if a and a.minValue<=float(sys.argv[2]) "
+        "and a.maxValue>=float(sys.argv[3]) else 1)"
+    )
+    try:
+        return subprocess.run(
+            [str(engine_python), "-c", probe, str(path), str(minimum), str(maximum)],
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=15,
+        ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _presenter_runtime_ready(
+    engine_python: Path,
+    normalize_python: Path,
+    fonts_dir: Path,
+) -> bool:
+    sans = fonts_dir / "NotoSansSC.ttf"
+    serif = fonts_dir / "NotoSerifSC.ttf"
     return (
         normalize_python.is_file()
-        and any(fonts_dir.glob("NotoSansSC*.ttf"))
-        and any(fonts_dir.glob("NotoSerifSC*.ttf"))
+        and sans.is_file()
+        and serif.is_file()
+        and _font_has_weight_axis(engine_python, sans, 100, 900)
+        and _font_has_weight_axis(engine_python, serif, 200, 900)
     )
 
 
@@ -114,7 +149,7 @@ def _prepare_presenter_runtime(engine_python: Path, playwright_root: Path) -> tu
         BUNDLED_PRESENTER_SUITE
         / "skills/sn-ppt-web/scripts/install.sh"
     )
-    if _presenter_runtime_ready(normalize_python, fonts_dir):
+    if _presenter_runtime_ready(engine_python, normalize_python, fonts_dir):
         return normalize_python, fonts_dir
     if os.name == "nt":
         print(
@@ -144,7 +179,7 @@ def _prepare_presenter_runtime(engine_python: Path, playwright_root: Path) -> tu
         )
     except subprocess.CalledProcessError as exc:
         raise SystemExit(f"Presenter runtime setup failed (exit={exc.returncode})") from exc
-    if not _presenter_runtime_ready(normalize_python, fonts_dir):
+    if not _presenter_runtime_ready(engine_python, normalize_python, fonts_dir):
         raise SystemExit("Presenter setup finished but required fonts/parsers are still missing")
     return normalize_python, fonts_dir
 

@@ -1282,7 +1282,7 @@ function applyServiceSettings(payload) {
   const image = serviceSettings.image_generation || {};
   const search = serviceSettings.web_search || {};
   const generation = serviceSettings.generation || {};
-  $("#service-max-tokens").value = generation.max_tokens || 40960;
+  $("#service-max-tokens").value = generation.max_tokens || 65536;
   $("#service-streaming-enabled").checked = generation.streaming_enabled !== false;
   $("#service-static-max-turns").value = generation.static_max_turns ?? 4096;
   $("#service-static-subagent-max-turns").value = generation.static_subagent_max_turns ?? 200;
@@ -1952,6 +1952,9 @@ function positionFloatingFontPanel() {
   const panelRect = panel.getBoundingClientRect();
   const viewportWidth = window.visualViewport?.width || window.innerWidth;
   const viewportHeight = window.visualViewport?.height || window.innerHeight;
+
+  // Prefer opening to the right of the settings menu. If the viewport is
+  // narrow, keep the complete panel inside the visible area instead.
   const preferredLeft = triggerRect.right + gap;
   const maxLeft = Math.max(margin, viewportWidth - panelRect.width - margin);
   const left = Math.max(margin, Math.min(preferredLeft, maxLeft));
@@ -1975,6 +1978,9 @@ function setFontPanel(open) {
   const next = !!open;
 
   if (next) {
+    // The sidebar intentionally clips its contents during collapse animation.
+    // Portalling this panel to <body> keeps font upload and role selectors
+    // fully visible without weakening the sidebar's overflow contract.
     if (panel.parentElement !== document.body) document.body.appendChild(panel);
     panel.classList.add("font-panel-floating");
     panel.hidden = false;
@@ -2881,7 +2887,7 @@ function taskConfigData() {
     ed.briefMeta?.style, ed.briefMeta?.scheme].filter(Boolean).join(" · ");
   const thinking = ed.briefMeta?.thinking === true ? "开启" : "关闭";
   const limits = ed.briefMeta?.runtime_limits || {};
-  const maxTokens = Number(limits.max_tokens) || 40960;
+  const maxTokens = Number(limits.max_tokens) || 65536;
   const configuredMain = ed.kind === "dynamic"
     ? Number(limits.dynamic_max_turns)
     : Number(limits.static_max_turns);
@@ -4280,6 +4286,7 @@ async function revealStaticDeckWhenFontsReady(frame, deckWindow) {
     return;
   }
   delete frame.dataset.pendingSlide;
+  ed.staticDirtyPages?.delete(Number(pending));
   frame.hidden = false;
   scheduleDeckViewportFit(frame);
   frame.classList.add("font-pending");
@@ -4318,9 +4325,11 @@ function showStaticDeck(n) {
   frame.dataset.fontsReady = "0";
   frame.classList.add("font-pending");
   frame.classList.remove("font-ready");
-  // This request contains every page revision known at requestedStamp. Changes
-  // arriving while it loads will be added to the set again by apply().
-  ed.staticDirtyPages?.clear();
+  // Do not clear every dirty page here. A deck-wide render can update many
+  // pages while this iframe is loading; clearing the set made fresh thumbnails
+  // coexist with stale nested slide documents. The successfully revealed page
+  // is removed in revealStaticDeckWhenFontsReady(), while other pages remain
+  // eligible for a cache-busted reload when selected.
   frame.src = `${ed.staticDeckUrl}?slide=${n}&t=${ed.staticStamp}`;
 }
 
@@ -4551,11 +4560,10 @@ function outlineHistoricalAgentMarkup(turn, kind) {
           <div class="outline-history-loading"><i></i><span>正在载入这一轮的完整制作过程…</span></div>
         </div>
       </div>` : dynamicHistoricalProcessMarkup(turn);
-  const open = kind === "static" ? " open" : "";
   return `<div class="outline-thread-bridge" aria-hidden="true"><span></span></div>
     <section class="outline-agent-turn outline-agent-history ${summary.state}">
       <div class="outline-agent-label"><span class="outline-agent-mark">${agentIdentityGlyph(kind)}</span><span class="outline-agent-copy"><b>SenseNova Present</b><i>上一轮回复</i></span>${outlineMessageTimeMarkup(turn?.responded_at || turn?.created_at, "agent")}</div>
-      <details class="outline-agent-history-details"${open}>
+      <details class="outline-agent-history-details">
         <summary class="outline-agent-history-card"><span class="outline-history-state" aria-hidden="true"></span><div><strong>${escapeHtml(summary.title)}</strong><p>${escapeHtml(summary.detail)}</p></div><i class="outline-history-chevron" aria-hidden="true"></i></summary>
         ${process}
       </details>
@@ -5838,6 +5846,34 @@ function orchestrationFlatFeed(feed) {
   }))).sort((a, b) => a.order - b.order);
 }
 
+function orchestrationEventTime(event) {
+  const elapsed = Number(event?.elapsed_s);
+  const local = conversationTime(event?.ts || event?.created_at);
+  const full = conversationTime(event?.ts || event?.created_at, { withDay: true });
+  if (local && full) {
+    return {
+      text: local.text,
+      title: `${full.text} · 事件发生时间（浏览器本地时区）${Number.isFinite(elapsed) ? ` · 任务启动后 ${fmtDur(elapsed)}` : ""}`,
+    };
+  }
+  // Compatibility fallback for historical events that have only a bare
+  // Harness wall clock. New events always prefer the explicit UTC timestamp
+  // above and are localized by the browser.
+  const clock = String(event?.clock || "").trim();
+  if (/^\d{2}:\d{2}:\d{2}$/.test(clock)) {
+    return {
+      text: clock,
+      title: Number.isFinite(elapsed) ? `历史记录时间 · 任务启动后 ${fmtDur(elapsed)}` : "历史过程记录时间",
+    };
+  }
+  return null;
+}
+
+function orchestrationOutputTimeMarkup(value, label = "记录") {
+  if (!value?.text) return "";
+  return `<time class="orch-output-time" title="${escapeHtml(value.title || value.text)}"><span>${escapeHtml(value.text)}</span><em>${escapeHtml(label)}</em></time>`;
+}
+
 function orchestrationAssignmentText(hint) {
   const value = String(hint || "");
   if (/\bMaterial\b/i.test(value)) return "已将附件解析与材料整理分派给 Material Agent。";
@@ -5901,18 +5937,20 @@ function orchestrationTimingMarkup() {
   const overallDuration = fmtDur(overall.duration_s);
   if (!timings.length && !overallDuration) return "";
   const rows = timings.map(([key, timing]) => {
+    const meta = orchestrationAgentMeta(key);
     const failed = timing.status === "failed";
     const running = timing.status === "running";
-    return `<div class="orchestration-timing-agent${failed ? " failed" : ""}${running ? " running" : ""}" title="${escapeHtml(key)}">
+    return `<div class="orchestration-timing-agent role-${escapeHtml(meta.role)}${failed ? " failed" : ""}${running ? " running" : ""}" title="${escapeHtml(key)}">
+      <i class="orchestration-timing-dot" aria-hidden="true"></i>
       <span>${escapeHtml(timingAgentLabel(key))}</span>
       <b>${escapeHtml(fmtDur(timing.duration_s))}</b>
-      <em>${failed ? "未完成" : (running ? "进行中" : "完成")}</em>
+      <em>${failed ? "未完成" : (running ? "进行中" : "已完成")}</em>
     </div>`;
   }).join("");
   return `<section class="orchestration-timing-card">
     <div class="orchestration-timing-head">
       <span><small>整体用时</small><strong>${escapeHtml(overallDuration || "计算中")}</strong></span>
-      <em>${timings.length} 个 Agent · 墙钟时间，并行会重叠</em>
+      <em><b>${timings.length}</b> 个 Agent 协同 · 各阶段包含并行重叠</em>
     </div>
     <div class="orchestration-timing-agents">${rows}</div>
   </section>`;
@@ -6220,13 +6258,13 @@ function normalizedOrchestratorProgress(value) {
     .replace(/[\s\p{P}\p{S}]+/gu, "");
 }
 
-function appendOrchestratorProgress(updates, text, order) {
+function appendOrchestratorProgress(updates, text, order, eventTime = null) {
   const compact = compactOrchestratorProgress(text);
   if (!compact) return;
   const normalized = normalizedOrchestratorProgress(compact);
   const previous = updates.at(-1);
   if (!previous) {
-    updates.push({ text: compact, order });
+    updates.push({ text: compact, order, eventTime });
     return;
   }
   const previousNormalized = normalizedOrchestratorProgress(previous.text);
@@ -6237,6 +6275,7 @@ function appendOrchestratorProgress(updates, text, order) {
   if (previousNormalized.length >= 10 && normalized.includes(previousNormalized)) {
     previous.text = compact;
     previous.order = order;
+    previous.eventTime = eventTime;
     return;
   }
   if (normalized.length >= 10 && previousNormalized.includes(normalized)) return;
@@ -6262,6 +6301,7 @@ function orchestrationEntries(feed, specialistArtifacts = ed.specialistArtifacts
       type: "orchestrator-progress",
       meta: orchestratorProgress.meta,
       timing: agentTimingFor("orch"),
+      eventTime: orchestratorProgress.updates.at(-1)?.eventTime || null,
       stage: orchestratorProgress.stage,
       updates: orchestratorProgress.updates,
       order: orchestratorProgress.order,
@@ -6281,12 +6321,12 @@ function orchestrationEntries(feed, specialistArtifacts = ed.specialistArtifacts
       const stage = orchestratorProgressStage(text);
       if (orchestratorProgress && orchestratorProgress.stage !== stage) flushOrchestratorProgress();
       if (!orchestratorProgress) orchestratorProgress = { meta, stage, order: event.order, updates: [] };
-      appendOrchestratorProgress(orchestratorProgress.updates, text, event.order);
+      appendOrchestratorProgress(orchestratorProgress.updates, text, event.order, orchestrationEventTime(event));
       return;
     }
     if (isOrchestrator && event.k === "tool" && event.tool === "delegate_task") {
       flushOrchestratorProgress();
-      entries.push({ type: "assignment", meta, timing: agentTimingFor("orch"), text: orchestrationAssignmentText(event.hint), order: event.order, key: `assign:${event.order}` });
+      entries.push({ type: "assignment", meta, timing: agentTimingFor("orch"), eventTime: orchestrationEventTime(event), text: orchestrationAssignmentText(event.hint), order: event.order, key: `assign:${event.order}` });
       return;
     }
     if (isOrchestrator && event.k === "tool") {
@@ -6294,7 +6334,7 @@ function orchestrationEntries(feed, specialistArtifacts = ed.specialistArtifacts
       const [action, detail] = toolProgress(event);
       const hint = friendlyToolHint(event);
       entries.push({
-        type: "orchestrator-action", meta, timing: agentTimingFor("orch"),
+        type: "orchestrator-action", meta, timing: agentTimingFor("orch"), eventTime: orchestrationEventTime(event),
         action, detail: hint ? `${detail}：${hint}` : detail,
         order: event.order, key: `orchestrator-action:${event.order}`,
       });
@@ -6314,7 +6354,7 @@ function orchestrationEntries(feed, specialistArtifacts = ed.specialistArtifacts
       const occurrenceKey = `${agentKey}\u0000${text}`;
       const occurrence = (occurrences.get(occurrenceKey) || 0) + 1;
       occurrences.set(occurrenceKey, occurrence);
-      entries.push({ type: "message", meta, timing: agentTimingFor(event.agent), text, order: event.order, key: JSON.stringify([occurrenceKey, occurrence]) });
+      entries.push({ type: "message", meta, timing: agentTimingFor(event.agent), eventTime: orchestrationEventTime(event), text, order: event.order, key: JSON.stringify([occurrenceKey, occurrence]) });
     }
   });
   flushOrchestratorProgress();
@@ -6352,10 +6392,9 @@ function orchestrationEntries(feed, specialistArtifacts = ed.specialistArtifacts
 
 function orchestrationEntryContent(entry) {
   const meta = entry.meta;
-  // One Agent can emit many planning/action messages. Repeating the same
-  // wall-clock range under every message makes the chronology noisier instead
-  // of clearer. Show it once on the durable specialist/page Agent stage card.
-  const duration = ["specialist", "slide"].includes(entry.type) ? agentTimingBadge(entry.timing) : "";
+  const stageTiming = ["specialist", "slide"].includes(entry.type) ? agentTimingBadge(entry.timing) : "";
+  const outputTime = entry.eventTime ? orchestrationOutputTimeMarkup(entry.eventTime) : "";
+  const footerTime = stageTiming || outputTime;
   const avatar = `<span class="orch-avatar ${escapeHtml(meta.role)}" aria-hidden="true">
     ${orchestrationAgentGlyph(meta, editorPresentationKind(), "orch-agent-glyph")}
   </span>`;
@@ -6380,45 +6419,50 @@ function orchestrationEntryContent(entry) {
     };
     const previews = galleryMarkup(entry.previews);
     const result = entry.result ? `<div class="specialist-result agent-markdown">${agentMarkdownHtml(entry.result)}</div>` : "";
-    const researchSources = meta.role === "research" && entry.sources?.length ? `<details class="specialist-phase research-source-phase specialist-research-details">
+    const specialistFeedback = (role, title, hint, content) => content ? `<details class="specialist-phase specialist-feedback-details specialist-${role}-feedback-details" data-detail-key="${escapeHtml(role)}-feedback">
+        <summary class="specialist-phase-head"><b>${escapeHtml(title)}</b><span>${escapeHtml(hint)}</span><i class="specialist-phase-chevron" aria-hidden="true"></i></summary>
+        <div class="specialist-feedback-body">${content}</div>
+      </details>` : "";
+    const researchSources = meta.role === "research" && entry.sources?.length ? `<details class="specialist-phase research-source-phase specialist-research-details" data-detail-key="research-sources">
         <summary class="specialist-phase-head"><b>已浏览资料</b><span>${entry.sources.length} 个来源</span><i class="specialist-phase-chevron" aria-hidden="true"></i></summary>
         <div class="specialist-research-body">
           ${entry.queries?.length ? `<div class="specialist-query-list">${entry.queries.map((query) => `<span>${escapeHtml(query)}</span>`).join("")}</div>` : ""}
           <div class="specialist-source-list">${entry.sources.map((source) => `<a href="${escapeHtml(source.url || "#")}" target="_blank" rel="noopener noreferrer"><b>${escapeHtml(source.title || source.url || "资料来源")}</b><small>${escapeHtml(source.url || "")}</small></a>`).join("")}</div>
         </div>
       </details>` : "";
-    const materialFiles = meta.role === "material" && entry.files?.length ? `<details class="specialist-phase material-file-phase specialist-material-details">
+    const materialFiles = meta.role === "material" && entry.files?.length ? `<details class="specialist-phase material-file-phase specialist-material-details" data-detail-key="material-files">
         <summary class="specialist-phase-head"><b>已处理材料</b><span>${entry.files.length} 份</span><i class="specialist-phase-chevron" aria-hidden="true"></i></summary>
         <div class="specialist-file-list">${entry.files.map((file) => `<span><i>${escapeHtml(String(file.kind || "file").toUpperCase())}</i><b>${escapeHtml(file.name || "未命名材料")}</b><em>${escapeHtml(file.coverage || file.status || "处理中")}</em></span>`).join("")}</div>
       </details>` : "";
     const reviewPhases = meta.role === "review" ? `<div class="specialist-phase review-live-phase">
         <div class="specialist-phase-head"><b>实时复核反馈</b><span>${entry.completed ? "复核已完成" : "随检查持续更新"}</span></div>
         <div class="specialist-review-live agent-markdown">${agentMarkdownHtml(entry.result || "Review Agent 正在检查成稿与页面一致性。")}</div>
-        ${entry.resultDetail ? `<details class="specialist-review-details"><summary class="specialist-phase-head"><b>查看完整复核说明</b><i class="specialist-phase-chevron" aria-hidden="true"></i></summary><div class="specialist-review-body agent-markdown">${agentMarkdownHtml(entry.resultDetail)}</div></details>` : ""}
+        ${entry.resultDetail ? `<details class="specialist-review-details" data-detail-key="review-full"><summary class="specialist-phase-head"><b>查看完整复核说明</b><i class="specialist-phase-chevron" aria-hidden="true"></i></summary><div class="specialist-review-body agent-markdown">${agentMarkdownHtml(entry.resultDetail)}</div></details>` : ""}
       </div>` : "";
     const imagePhases = meta.role === "image" ? `<div class="specialist-phase material-phase">
-        <div class="specialist-phase-head"><b>素材采集</b><span>${entry.assetCount ? `已准备 ${entry.assetCount} 项素材` : "正在准备素材"}</span></div>
-        ${entry.collectionResult ? `<div class="specialist-phase-note agent-markdown">${agentMarkdownHtml(entry.collectionResult)}</div>` : ""}
+        <div class="specialist-phase-head"><b>已使用图片</b><span>${entry.assetCount ? `${entry.assetCount} 项图片素材` : "正在准备图片"}</span></div>
         ${previews}
       </div>
-      <details class="specialist-phase review-phase specialist-review-details">
-        <summary class="specialist-phase-head"><b>整体核验</b><span>${entry.visionCount ? `已完成 ${entry.visionCount} 次视觉检查` : "等待整体检查"}</span><i class="specialist-phase-chevron" aria-hidden="true"></i></summary>
-        <div class="specialist-review-body">
-          ${galleryMarkup(entry.contactSheet ? [entry.contactSheet] : [], "contact-sheet-gallery")}
-          ${result}
-        </div>
-      </details>` : (meta.role === "review" ? reviewPhases : `${researchSources}${materialFiles}${previews}${result}`);
+      ${specialistFeedback("image", "查看完整素材说明", entry.visionCount ? `${entry.visionCount} 次检查 · 问题反馈默认收起` : "生成与核验记录默认收起", `
+        ${entry.collectionResult ? `<div class="specialist-phase-note agent-markdown">${agentMarkdownHtml(entry.collectionResult)}</div>` : ""}
+        ${galleryMarkup(entry.contactSheet ? [entry.contactSheet] : [], "contact-sheet-gallery")}
+        ${result}
+      `)}` : (meta.role === "review" ? reviewPhases : (meta.role === "research"
+        ? `${researchSources}${specialistFeedback("research", "查看完整研究说明", "结论、核验与未决事项", result)}`
+        : `${materialFiles}${previews}${specialistFeedback("material", "查看完整材料说明", "解析、覆盖与问题反馈", result)}`));
     return `${avatar}<div class="orch-entry-copy specialist-copy">
-      <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i>${duration}<em class="${entry.completed ? "done" : "running"}">${status}</em></div>
+      <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i><em class="${entry.completed ? "done" : "running"}">${status}</em></div>
       <div class="specialist-steps">${steps}</div>${imagePhases}
+      ${footerTime ? `<div class="orch-entry-foot">${footerTime}</div>` : ""}
     </div>`;
   }
   if (entry.type === "slide") {
     const status = entry.completed ? "已完成" : "正在执行";
     const detail = entry.resultDetail ? `<details class="orch-slide-detail"><summary>查看完整制作说明<i></i></summary><div class="agent-markdown">${agentMarkdownHtml(entry.resultDetail)}</div></details>` : "";
     return `${avatar}<div class="orch-entry-copy">
-      <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i>${duration}<em class="${entry.completed ? "done" : "running"}">${status}</em></div>
+      <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i><em class="${entry.completed ? "done" : "running"}">${status}</em></div>
       <div class="orch-slide-flow"><span><i></i><b>执行</b><em>${escapeHtml(entry.action)}</em></span>${entry.result ? `<span class="result"><i></i><b>结果</b><em>${agentStoryHtml(entry.result)}</em></span>` : ""}</div>${detail}
+      ${footerTime ? `<div class="orch-entry-foot">${footerTime}</div>` : ""}
     </div>`;
   }
   if (entry.type === "orchestrator-progress") {
@@ -6427,23 +6471,26 @@ function orchestrationEntryContent(entry) {
     const history = updates.slice(0, -1);
     const historyMarkup = history.length ? `<details class="orch-progress-history">
       <summary>查看已合并的 ${history.length} 条阶段进展<i aria-hidden="true"></i></summary>
-      <ol>${history.map((update) => `<li>${escapeHtml(update.text)}</li>`).join("")}</ol>
+      <ol>${history.map((update) => `<li><p>${escapeHtml(update.text)}</p>${orchestrationOutputTimeMarkup(update.eventTime)}</li>`).join("")}</ol>
     </details>` : "";
     return `${avatar}<div class="orch-entry-copy">
-      <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i>${duration}${updates.length > 1 ? `<em>${updates.length} 条进展</em>` : ""}</div>
+      <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i>${updates.length > 1 ? `<em>${updates.length} 条进展</em>` : ""}</div>
       <div class="orch-progress-current"><i aria-hidden="true"></i><p>${escapeHtml(latest)}</p></div>
       ${historyMarkup}
+      ${outputTime ? `<div class="orch-entry-foot">${outputTime}</div>` : ""}
     </div>`;
   }
   if (entry.type === "orchestrator-action") {
     return `${avatar}<div class="orch-entry-copy">
-      <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i>${duration}</div>
+      <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i></div>
       <div class="orch-slide-flow"><span><i></i><b>${escapeHtml(entry.action || "推进任务")}</b><em>${escapeHtml(entry.detail || "继续推进整套演示。")}</em></span></div>
+      ${outputTime ? `<div class="orch-entry-foot">${outputTime}</div>` : ""}
     </div>`;
   }
   return `${avatar}<div class="orch-entry-copy">
-    <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i>${duration}</div>
+    <div class="orch-entry-head"><b>${escapeHtml(meta.label)}</b><i>${escapeHtml(meta.note)}</i></div>
     ${entry.type === "assignment" ? `<p>${escapeHtml(entry.text)}</p>` : `<div class="agent-markdown">${agentMarkdownHtml(entry.text)}</div>`}
+    ${outputTime ? `<div class="orch-entry-foot">${outputTime}</div>` : ""}
   </div>`;
 }
 
@@ -6458,14 +6505,13 @@ function reconcileOrchestrationEntries(list, entries) {
     card.className = `orch-entry ${entry.type} role-${entry.meta.role}`;
     const content = orchestrationEntryContent(entry);
     if (card.dataset.renderKey !== content) {
-      const reviewWasOpen = card.querySelector(".specialist-review-details")?.open === true;
-      const researchWasOpen = card.querySelector(".specialist-research-details")?.open === true;
-      const materialWasOpen = card.querySelector(".specialist-material-details")?.open === true;
+      const openDetailKeys = new Set([...card.querySelectorAll("details[data-detail-key][open]")]
+        .map((detail) => detail.dataset.detailKey));
       card.dataset.renderKey = content;
       card.innerHTML = content;
-      if (reviewWasOpen) card.querySelector(".specialist-review-details")?.setAttribute("open", "");
-      if (researchWasOpen) card.querySelector(".specialist-research-details")?.setAttribute("open", "");
-      if (materialWasOpen) card.querySelector(".specialist-material-details")?.setAttribute("open", "");
+      card.querySelectorAll("details[data-detail-key]").forEach((detail) => {
+        if (openDetailKeys.has(detail.dataset.detailKey)) detail.setAttribute("open", "");
+      });
     }
     existing.delete(entry.key);
     const current = list.children[index];
@@ -6479,6 +6525,16 @@ function renderOrchestrationProgress(body, feed, { running = false, specialistAr
   body.classList.add("is-orchestration");
   body.closest(".outline-agent-turn")?.classList.add("is-orchestration");
   const { flat, entries } = orchestrationEntries(feed, specialistArtifacts);
+  const scroller = body.closest(".outline-chat-body") || body;
+  const wasNearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+  const previousTop = scroller.scrollTop;
+  const flowSignature = JSON.stringify(entries.map((entry) => [
+    entry.key, entry.order, entry.completed,
+    entry.eventTime?.text || "",
+    entry.updates?.at(-1)?.text || entry.result || entry.text || entry.action || "",
+  ]));
+  const flowChanged = body.dataset.orchestrationFlowSignature !== flowSignature;
+  const firstFlowRender = !body.dataset.orchestrationFlowSignature;
   const latest = [...flat].reverse().find((event) => event.k === "tool" || cleanAgentText(event.s));
   const latestMeta = orchestrationAgentMeta(latest?.agent || "orch");
   let stateTitle = running ? "正在组织整套演示" : "整套任务记录已整理";
@@ -6486,12 +6542,23 @@ function renderOrchestrationProgress(body, feed, { running = false, specialistAr
   if (ed.status === "not_started") {
     stateTitle = "尚未开始生成";
     stateDetail = "这条 Query 已进入正式待生成清单，开始运行后会在这里展示完整制作过程。";
-  }
-  if (latest?.k === "tool") {
+  } else if (ed.status === "completed") {
+    const pageCount = Number(ed.total || ed.rendered?.size || 0);
+    stateTitle = "整套演示已完成";
+    stateDetail = pageCount
+      ? `全部 ${pageCount} 页已经完成制作与检查，可以继续预览、播放或导出。`
+      : "页面制作与检查已经完成，可以继续预览、播放或导出。";
+  } else if (["failed", "rejected", "error"].includes(ed.status)) {
+    stateTitle = "本次生成未能完成";
+    stateDetail = "已保留本轮制作记录，可查看具体阶段与失败原因。";
+  } else if (["stopped", "interrupted"].includes(ed.status)) {
+    stateTitle = "本次生成已中断";
+    stateDetail = "已保留中断前的制作记录，可以回看进展或重新生成。";
+  } else if (running && latest?.k === "tool") {
     const [action, detail] = toolProgress(latest);
     stateTitle = `${latestMeta.label} · ${action}`;
     stateDetail = detail;
-  } else if (latest) {
+  } else if (running && latest) {
     const text = cleanAgentText(latest.s);
     stateTitle = `${latestMeta.label} 正在反馈`;
     stateDetail = compactOrchestrationCurrentDetail(latestMeta, text);
@@ -6525,6 +6592,13 @@ function renderOrchestrationProgress(body, feed, { running = false, specialistAr
   }
   const now = body.querySelector(".agent-now");
   now.classList.toggle("is-running", running);
+  now.classList.toggle("is-completed", ed.status === "completed");
+  const nowKicker = now.querySelector(".agent-kicker");
+  if (nowKicker) {
+    nowKicker.textContent = ed.status === "completed"
+      ? "任务完成"
+      : (["failed", "rejected", "error", "stopped", "interrupted"].includes(ed.status) ? "任务状态" : "当前工作");
+  }
   const nowIcon = now.querySelector(".agent-now-icon");
   const nowGlyph = now.querySelector("[data-now-agent-glyph]");
   const glyphKey = `${editorPresentationKind()}:${latestMeta.role}:${latestMeta.key}`;
@@ -6551,6 +6625,7 @@ function renderOrchestrationProgress(body, feed, { running = false, specialistAr
   body.querySelector("[data-material-count]").textContent = roleCount("material");
   const list = body.querySelector(".orchestration-entry-list");
   reconcileOrchestrationEntries(list, entries);
+  body.dataset.orchestrationFlowSignature = flowSignature;
   const actions = summarizeToolEvents(flat);
   const actionCount = flat.filter((event) => event.k === "tool").length;
   body.querySelector(".agent-actions summary em").textContent = actionCount ? `${actions.length} 类动作 · ${actionCount} 次执行` : "等待执行";
@@ -6559,6 +6634,15 @@ function renderOrchestrationProgress(body, feed, { running = false, specialistAr
   if (actionList.dataset.renderKey !== actionKey) {
     actionList.dataset.renderKey = actionKey;
     actionList.innerHTML = actions.length ? actions.map((action, index) => `<div class="agent-action${index === 0 && running ? " active" : ""}"><span>${index === 0 && running ? "•" : "✓"}</span><b>${escapeHtml(action.label)}</b>${action.hint ? `<i>${escapeHtml(action.hint)}</i>` : ""}${action.count > 1 ? `<em>×${action.count}</em>` : ""}</div>`).join("") : '<div class="agent-action-empty">还没有底层执行记录</div>';
+  }
+  if (flowChanged) {
+    requestAnimationFrame(() => {
+      const shouldFollow = wasNearBottom || (firstFlowRender && running);
+      scroller.scrollTo({
+        top: shouldFollow ? scroller.scrollHeight : previousTop,
+        behavior: shouldFollow && !firstFlowRender ? "smooth" : "auto",
+      });
+    });
   }
 }
 
@@ -6802,7 +6886,7 @@ $("#user-menu").addEventListener("click", (e) => {
   }
 });
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#user-menu") && !e.target.closest("#user-menu-trigger")) setUserMenu(false);
+  if (!e.target.closest("#user-menu") && !e.target.closest("#user-menu-trigger") && !e.target.closest("#font-panel")) setUserMenu(false);
   if (e.target.closest("[data-open-auth]")) setAuthGate(true);
 });
 $$('[data-auth-tab]').forEach((button) => button.addEventListener("click", () => setAuthTab(button.dataset.authTab)));
@@ -7066,7 +7150,7 @@ $("#service-modal").addEventListener("click", (event) => {
 });
 $("#service-image-provider").addEventListener("change", () => syncImageProviderFields({ applyDefaults: true }));
 $("#service-generation-reset").addEventListener("click", () => {
-  $("#service-max-tokens").value = 40960;
+  $("#service-max-tokens").value = 65536;
   $("#service-streaming-enabled").checked = true;
   $("#service-static-max-turns").value = 4096;
   $("#service-static-subagent-max-turns").value = 200;

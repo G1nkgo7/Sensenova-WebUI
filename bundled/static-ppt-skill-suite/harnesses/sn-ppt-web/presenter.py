@@ -825,9 +825,6 @@ def _grounded_acceptance(ws, *, require_materials, research_workers):
     return False, "缺少有效 plan/grounded-knowledge.md；Material/Research 交接未完成"
 
 
-_ASSET_ID_RE = re.compile(
-    r"(?i)\basset[_ -]?id\b\s*[:=]\s*[`'\"]?([A-Za-z0-9._-]+)"
-)
 _IMAGE_OPPORTUNITY_RE = re.compile(
     r"(?im)^\s*[-*+]?\s*(?:\*\*)?image_opportunity(?:\*\*)?\s*[:：]\s*(.+?)\s*$"
 )
@@ -837,7 +834,7 @@ def _planned_asset_ids(ws):
     # Reuse the harness's single source of truth for the no-bitmap decision so
     # the startup dispatch gate and this final acceptance never diverge (a page
     # marked ``none`` or the CJK ``无位图`` must read the same on both sides).
-    from core.agent import _image_opportunity_needs_bitmap
+    from core.agent import _image_opportunity_needs_bitmap, _plan_asset_ids
 
     ids, needs_image = set(), False
     for plan in glob.glob(os.path.join(ws, "plan", "slide_*.md")):
@@ -845,7 +842,7 @@ def _planned_asset_ids(ws):
             text = Path(plan).read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        ids.update(_ASSET_ID_RE.findall(text))
+        ids.update(_plan_asset_ids(text))
         opportunity = _IMAGE_OPPORTUNITY_RE.search(text)
         if opportunity and _image_opportunity_needs_bitmap(opportunity.group(1)):
             needs_image = True

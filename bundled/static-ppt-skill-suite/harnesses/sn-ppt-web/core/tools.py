@@ -32,7 +32,12 @@ import urllib.request
 
 import requests
 
-from .contracts import REVIEW_CLOSEOUT_ARTIFACTS
+try:
+    from .contracts import REVIEW_CLOSEOUT_ARTIFACTS
+except ImportError:  # Direct-file loading used by release smoke tests.
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from contracts import REVIEW_CLOSEOUT_ARTIFACTS
 
 IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 FOREGROUND_MAX_TIMEOUT = int(os.environ.get("TERMINAL_MAX_FOREGROUND_TIMEOUT", "600"))  # 对齐 hermes 默认 600
@@ -751,6 +756,23 @@ _SENSENOVA_U1_SIZE = {
 }
 
 
+class ImagePolicyRejected(RuntimeError):
+    """The provider rejected the prompt; retrying it unchanged is wasteful."""
+
+
+def _image_policy_rejection(response):
+    if getattr(response, "status_code", 0) == 451:
+        return True
+    try:
+        payload = response.json()
+    except Exception:
+        return False
+    text = json.dumps(payload, ensure_ascii=False).lower()
+    return any(marker in text for marker in (
+        "image_unsafe", "content_policy", "safety", "unsafe", "policy violation",
+    ))
+
+
 def _image_api_request(agent, prompt, size, aspect_ratio=None):
     """Call the configured Images API provider and return decoded JSON."""
     provider = str(getattr(agent, "image_provider", "openai_images") or "openai_images").lower()
@@ -778,6 +800,8 @@ def _image_api_request(agent, prompt, size, aspect_ratio=None):
         # services may need several minutes when the backend is under load.
         timeout=600,
     )
+    if _image_policy_rejection(response):
+        raise ImagePolicyRejected("IMAGE_POLICY_REJECTED")
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, dict):
@@ -852,6 +876,11 @@ def _image_gen_one(agent, prompt, size, aspect_ratio=None):
         try:
             payload = _image_api_request(agent, prompt, size, aspect_ratio)
             data = _image_bytes_from_payload(payload)
+        except ImagePolicyRejected:
+            return (
+                "IMAGE_POLICY_REJECTED：该提示词被安全策略拒绝；"
+                "不要尝试绕过安全过滤器，请改用合规素材或调整视觉方案。"
+            )
         except Exception as e:
             last_err = str(e)[:160]
             data = None

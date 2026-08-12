@@ -23,6 +23,7 @@
 # ============================================================================
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUNDLED_FONTS_DIR="${BUNDLED_FONTS_DIR:-$HERE/../../../../fonts}"
 
 NORMALIZE_VENV="${NORMALIZE_VENV:-$HOME/.cache/sn-ppt-web/venv-normalize}"
 FONTS_DIR="${FONTS_DIR:-$HOME/.fonts}"
@@ -75,6 +76,15 @@ install_pymupdf(){
 install_fonts(){
   log "3) OFL 字体包 → $FONTS_DIR"
   mkdir -p "$FONTS_DIR"
+  if [ -d "$BUNDLED_FONTS_DIR" ]; then
+    local bundled_count=0 bundled_font
+    for bundled_font in "$BUNDLED_FONTS_DIR"/*.ttf "$BUNDLED_FONTS_DIR"/*.otf; do
+      [ -f "$bundled_font" ] || continue
+      cp -f "$bundled_font" "$FONTS_DIR/"
+      bundled_count=$((bundled_count + 1))
+    done
+    log "  已从发布包安装 $bundled_count 个开源字体（离线可用）"
+  fi
   # 优先复用宿主已有 Noto SC；其余字体按官方 OFL 源补齐。
   local found=0 src f
   for src in "$HOME/.fonts" /usr/share/fonts /mnt/afs/*/.fonts; do

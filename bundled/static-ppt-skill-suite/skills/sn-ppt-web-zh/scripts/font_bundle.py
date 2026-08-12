@@ -42,13 +42,10 @@ class Face:
 # through to the next allowed family in their CSS stack.
 FAMILY_FACES: dict[str, tuple[Face, ...]] = {
     "Noto Sans SC": (
-        Face(("NotoSansSC.ttf", "NotoSansSC[wght].ttf", "NotoSansSC-Regular.ttf", "NotoSansCJKsc-Regular.otf"), "400"),
-        Face(("NotoSansSC-Bold.ttf", "NotoSansSC-Bold.otf", "NotoSansSC.ttf"), "700"),
-        Face(("NotoSansSC-900.ttf", "NotoSansSC.ttf", "NotoSansCJKsc-Black.otf"), "900"),
+        Face(("NotoSansSC[wght].ttf", "NotoSansSC.ttf"), "100 900"),
     ),
     "Noto Serif SC": (
-        Face(("NotoSerifSC.ttf", "NotoSerifSC[wght].ttf", "NotoSerifSC-Regular.otf", "NotoSerifCJKsc-Regular.otf"), "400"),
-        Face(("NotoSerifSC-Bold.otf", "NotoSerifSC.ttf", "NotoSerifCJKsc-Bold.otf"), "700"),
+        Face(("NotoSerifSC[wght].ttf", "NotoSerifSC.ttf"), "200 900"),
     ),
     "IBM Plex Mono": (
         Face(("IBMPlexMono-Regular.ttf",), "400"),
@@ -67,7 +64,7 @@ FAMILY_FACES: dict[str, tuple[Face, ...]] = {
     "Xiaolai": (Face(("Xiaolai-Regular.ttf",), "400"),),
     "LXGW WenKai": (
         Face(("LXGWWenKai-Regular.ttf",), "400"),
-        # The official TTF package contains a regular face; browsers may
+        # The official TTF release is a regular face; browsers may
         # synthesize bold while the portable bundle keeps the same glyph design.
         # Prefer the verified regular source here. Some historical authoring
         # images contain a malformed bold cmap; using it makes pyftsubset fail
@@ -255,14 +252,52 @@ def _font_source_dirs() -> list[Path]:
     return result
 
 
+def _declared_weight_range(weight: str) -> tuple[float, float] | None:
+    values = weight.split()
+    if len(values) != 2:
+        return None
+    return float(values[0]), float(values[1])
+
+
+@lru_cache(maxsize=None)
+def _variable_weight_range(path: str) -> tuple[float, float] | None:
+    """Return the real ``wght`` axis bounds, never a filename/CSS guess."""
+    try:
+        from fontTools.ttLib import TTFont
+
+        font = TTFont(path, lazy=False)
+        try:
+            if "fvar" not in font:
+                return None
+            for axis in font["fvar"].axes:
+                if axis.axisTag == "wght":
+                    return float(axis.minValue), float(axis.maxValue)
+        finally:
+            font.close()
+    except Exception:
+        return None
+    return None
+
+
+def _font_supports_face(path: Path, face: Face) -> bool:
+    if not _font_source_readable(str(path)):
+        return False
+    declared = _declared_weight_range(face.weight)
+    if declared is None:
+        return True
+    actual = _variable_weight_range(str(path))
+    return actual is not None and actual[0] <= declared[0] and actual[1] >= declared[1]
+
+
 def _find_source(face: Face, source_dirs: list[Path]) -> Path:
     for directory in source_dirs:
         for name in face.source_names:
             candidate = directory / name
-            if candidate.is_file() and candidate.stat().st_size:
+            if candidate.is_file() and candidate.stat().st_size and _font_supports_face(candidate, face):
                 return candidate
     raise FileNotFoundError(
-        f"missing delivery font source {list(face.source_names)!r}; searched "
+        f"missing compatible delivery font source {list(face.source_names)!r} "
+        f"for weight {face.weight!r}; searched "
         + ", ".join(str(item) for item in source_dirs)
     )
 
@@ -549,6 +584,14 @@ def _subset(
         detail = (result.stderr or result.stdout or "font subset failed")[-1000:]
         raise RuntimeError(f"pyftsubset failed for {source.name}: {detail}")
     _rename_subset_font(target, delivery_family, weight, style)
+    declared = _declared_weight_range(weight)
+    actual = _variable_weight_range(str(target)) if declared is not None else None
+    if declared is not None and (
+        actual is None or actual[0] > declared[0] or actual[1] < declared[1]
+    ):
+        raise RuntimeError(
+            f"subset lost required variable weight range {weight} for {source.name}"
+        )
 
 
 def bundle_fonts(

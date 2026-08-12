@@ -2827,8 +2827,8 @@ def _grounding_before_downstream_error(parent, tasks):
 _IMAGE_OPPORTUNITY_LINE_RE = re.compile(
     r"(?im)^\s*[-*+]?\s*(?:\*\*)?image_opportunity(?:\*\*)?\s*[:：]\s*(.+?)\s*$"
 )
-_PLAN_ASSET_ID_RE = re.compile(
-    r"(?i)\basset[_ -]?id\b\s*[:=]\s*[`'\"]?([A-Za-z0-9._-]+)"
+_PLAN_ASSET_ID_LINE_RE = re.compile(
+    r"(?im)^\s*[-*+]?\s*(?:\*\*)?asset[_ -]?id(?:\*\*)?\s*[:：=]\s*(.+?)\s*$"
 )
 _PLAN_PRESENTATION_RE = re.compile(
     r"(?im)^\s*[-*+]?\s*(?:\*\*)?presentation(?:\*\*)?\s*[:：]\s*`?([A-Za-z-]+)"
@@ -2937,6 +2937,17 @@ def _image_opportunity_needs_bitmap(raw_value):
     return True
 
 
+def _plan_asset_ids(text):
+    """Return stable IDs from one or more plan fields, including CJK syntax."""
+    found = set()
+    for raw_value in _PLAN_ASSET_ID_LINE_RE.findall(str(text or "")):
+        for item in re.split(r"[,，]", raw_value):
+            match = re.match(r"\s*[`'\"]?([A-Za-z0-9._-]+)", item)
+            if match:
+                found.add(match.group(1))
+    return sorted(found)
+
+
 def _slide_image_plan(ws):
     """Read the frozen per-page bitmap decision and stable asset references."""
     plans = []
@@ -2972,7 +2983,7 @@ def _slide_image_plan(ws):
             "needs_bitmap": needs_bitmap,
             "presentation": presentation,
             "subject_only": bool(_PLAN_SUBJECT_ONLY_RE.search(visual)),
-            "asset_ids": sorted(set(_PLAN_ASSET_ID_RE.findall(text))),
+            "asset_ids": _plan_asset_ids(text),
             "has_raster_asset": has_raster_asset,
             "has_raster_medium": has_raster_medium,
         })
@@ -3726,6 +3737,8 @@ def delegate_task(parent, goal=None, context=None, toolsets=None, role=None,
             "retry": (
                 "先完成逐页可见主体扫描；有配图机会时先单独委派 Image Agent，"
                 "验收 assets/catalog.json 并把 ready asset_id 回填计划，再重试 Slide 委派。"
+                "asset_id 行可使用半角或全角冒号；若素材已 ready，直接按 error 中的 pages "
+                "修正计划并重试，不要搜索 Skill/Harness 运行时代码或全盘搜索错误字符串。"
             ),
         }, ensure_ascii=False)
     singleton_error = _reserve_singleton_roles(parent, norm)
