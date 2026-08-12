@@ -204,7 +204,7 @@ def _canonical_agent_label(role, label):
 
 
 class Agent:
-    """通用单 Agent 循环(Claude + 工具);Agent 对象 = 状态,循环逻辑在下面的 run_loop。
+    """通用单 Agent 循环(模型 + 工具);Agent 对象 = 状态,循环逻辑在下面的 run_loop。
 
     编排器和子 agent 共用这个类,区别只在:工具集、初始任务、system、只读写前缀,以及编排器
     额外注册了 delegate_task。父子**共享同一个工作区 ws**(协作产出同一套产物),但各写各的轨迹。"""

@@ -23,6 +23,8 @@
 
 可修复文案、像素、对齐、裁切、溢出、低对比、图片变形、页脚冲突、特殊页漂移和讲稿不一致。必须保留 goal 指定的事实、页序、叙事职责、Style Lock 与未受影响页面。若需要重做叙事、补新事实/素材或改变全局系统，返回 `blocked` 交回 Orchestrator。
 
+讲稿验收不能只检查“字段存在”和“事实一致”。逐页抽读时必须确认它是站在讲者口吻下可直接朗读的完整串词：应推进解释、补充屏幕没有写出的因果、场景或过渡，不能把标题、标签、卡片名机械改写成枚举；不得包含独立的 Markdown 围栏行（如 ````` ``）、`plan/`、`research/`、`_trace/`、`grounded-knowledge.md`、编排器假设或生产备注。发现这些问题时，直接修正规范 `plan/slide_NN.md` 的 `## 口语讲稿` 与 `## 来源`，再由 `deck.py build` 重新生成 `speech.md`；不能只手改派生的 `speech.md`。只有抽读覆盖全册、格式干净且讲稿不像屏显复述时，合同才可返回 `speech_aligned: yes`。
+
 不得用全局正则、临时脚本或搜索替换扫描整份 HTML 来润色标点、引号或大小写；HTML 标签、属性、CSS 与 JavaScript 不属于屏显文案。非像素硬伤不值得冒险改坏结构，必要的文案修订只对明确可见的文本节点做小范围精确 patch。
 
 质量判断顺序是：**新鲜最终 PNG / Vision → DOM 与 computed geometry → 机检候选**。使用 `render.json`、PNG 和页面 DOM 判断问题，不读取或调试 `render.py`、`deck.py` 等工具实现来推翻质量门。硬阻塞仅包括：交付文件缺失/损坏、真实裁切或不可读溢出、浏览器运行错误、过期渲染、缺页或缺少 `present.html`。`cjkTypography`、`crowded`、`boxoverflow`、文字 bbox 相交、轻微低对比、细微换行/标点、没有改变事实含义的图表形式差异和审美偏好均为 advisory；除非新鲜像素或 DOM 证明其已造成真实不可读、遮挡、错义或用户明确要求被破坏，否则不能单独触发修改或 `blocked`。若报告与像素明显冲突，记录为 checker mismatch 并保留视觉更好的版本，不把 Review 变成渲染器调试任务。

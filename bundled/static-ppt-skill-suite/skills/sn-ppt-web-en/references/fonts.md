@@ -2,7 +2,7 @@
 
 ## 1. License boundary
 
-Use only fonts whose license permits packaging, fonts installed by this Skill's installer, or fonts explicitly supplied and authorized by the user. Do not assume a locally installed commercial family may be packaged in delivery artifacts.
+Use only fonts that have a compatible packaging license, are installed by this Skill's font installer, or are explicitly supplied and authorized by the user. Do not assume a locally installed commercial family may be packaged in delivery artifacts.
 
 `materials/font-config.json`, when present, is authoritative for title, body, number, mono, and annotation roles. Keep the original user font files under materials and let the deterministic font bundler create delivery subsets.
 

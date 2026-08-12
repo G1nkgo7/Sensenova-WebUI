@@ -631,10 +631,20 @@ def _agent_timing_payload(run_dir, aliases=None):
             for name in ("messages.json", "tool_log.json", "summary.md", "usage.json", "handoff.json")
             if os.path.isfile(os.path.join(role_dir, name))
         ]
+        image_paths = [path for path in glob.glob(os.path.join(role_dir, "images", "*")) if os.path.isfile(path)]
         complete = any(os.path.basename(path) in {"summary.md", "usage.json", "handoff.json"} for path in completion_paths)
         running = not complete and _trace_pid_alive(config.get("pid"))
-        finished = max((os.path.getmtime(path) for path in completion_paths), default=0.0) if complete else None
-        status = "complete" if complete else ("running" if running else "waiting")
+        # A dead worker with durable messages, tool calls, or Vision inputs did
+        # start work; calling it "waiting" makes recovered history look as if
+        # the Agent never ran.  Preserve that distinction as interrupted even
+        # when its final summary/usage contract was lost.
+        activity_paths = completion_paths + image_paths
+        interrupted = not complete and not running and bool(activity_paths)
+        finished = (
+            max((os.path.getmtime(path) for path in activity_paths), default=0.0)
+            if complete or interrupted else None
+        )
+        status = "complete" if complete else ("running" if running else ("interrupted" if interrupted else "waiting"))
         end = finished or (time.time() if running else None)
         candidate = {
             "status": status,
@@ -648,8 +658,11 @@ def _agent_timing_payload(run_dir, aliases=None):
             previous_finish = _trace_timestamp(previous.get("finished_at"))
             merged_start = min(previous_start, started)
             merged_finish = max(previous_finish or 0.0, finished or 0.0) or None
-            merged_status = "running" if "running" in {previous.get("status"), status} else (
-                "complete" if "complete" in {previous.get("status"), status} else "waiting"
+            merged_states = {previous.get("status"), status}
+            merged_status = "running" if "running" in merged_states else (
+                "complete" if "complete" in merged_states else (
+                    "interrupted" if "interrupted" in merged_states else "waiting"
+                )
             )
             merged_end = merged_finish or (time.time() if merged_status == "running" else None)
             candidate = {

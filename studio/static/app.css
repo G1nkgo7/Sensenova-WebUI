@@ -277,11 +277,13 @@ a:hover { text-decoration: underline; }
 }
 .kind-mark.s-failed,
 .kind-mark.s-rejected,
-.kind-mark.s-error,
+.kind-mark.s-error {
+  color: #e8505b; background: rgba(232,80,91,.10); box-shadow: inset 0 0 0 1px rgba(232,80,91,.17);
+}
 .kind-mark.s-stopped,
 .kind-mark.s-interrupted,
 .kind-mark.s-max_turns {
-  color: #e8505b; background: rgba(232,80,91,.10); box-shadow: inset 0 0 0 1px rgba(232,80,91,.17);
+  color: #b87812; background: rgba(207,139,28,.11); box-shadow: inset 0 0 0 1px rgba(184,120,18,.19);
 }
 .kind-mark.s-running {
   color: #7b55e7; background: rgba(91,41,218,.11);
@@ -2777,10 +2779,10 @@ html[data-theme="dark"] .kind-mark.s-waiting,
 html[data-theme="dark"] .kind-mark.s-queued { color: #b39cff; background: rgba(140,104,255,.12); box-shadow: inset 0 0 0 1px rgba(155,126,255,.20); }
 html[data-theme="dark"] .kind-mark.s-failed,
 html[data-theme="dark"] .kind-mark.s-rejected,
-html[data-theme="dark"] .kind-mark.s-error,
+html[data-theme="dark"] .kind-mark.s-error { color: #ff7c84; background: rgba(255,105,116,.11); box-shadow: inset 0 0 0 1px rgba(255,105,116,.19); }
 html[data-theme="dark"] .kind-mark.s-stopped,
 html[data-theme="dark"] .kind-mark.s-interrupted,
-html[data-theme="dark"] .kind-mark.s-max_turns { color: #ff7c84; background: rgba(255,105,116,.11); box-shadow: inset 0 0 0 1px rgba(255,105,116,.19); }
+html[data-theme="dark"] .kind-mark.s-max_turns { color: #f1b85b; background: rgba(230,159,47,.12); box-shadow: inset 0 0 0 1px rgba(241,184,91,.20); }
 html[data-theme="dark"] .sidebar-foot { border-top-color: rgba(255,255,255,.08); }
 html[data-theme="dark"] .brand-slogan {
   color: #8f9097; background: linear-gradient(105deg, rgba(140,104,255,.085), rgba(40,231,180,.035));
@@ -3760,6 +3762,8 @@ html[data-theme="dark"] .badge.ph-done { color: #6ee1bc; background: rgba(43,212
 .orchestration-timing-agent > em { grid-column: 2 / -1; color: #0a8865; font-size: 9.5px; line-height: 1.2; font-style: normal; }
 .orchestration-timing-agent.running > em { color: #704bd0; }
 .orchestration-timing-agent.failed > em { color: #c44f59; }
+.orchestration-timing-agent.interrupted > em { color: #b87812; }
+.orchestration-timing-agent.waiting > em { color: #827987; }
 .agent-now.orchestration-now.is-completed {
   border-color: rgba(20,169,128,.16);
   background: linear-gradient(120deg, rgba(91,41,218,.055), rgba(20,169,128,.055));

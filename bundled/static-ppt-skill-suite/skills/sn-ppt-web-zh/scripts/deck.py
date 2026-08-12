@@ -36,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from urllib.parse import unquote
 
 from font_bundle import (
     bundle_workspace,
@@ -406,7 +407,12 @@ def _normalize_runtime_references(root: Path) -> None:
 
 
 def _is_external_reference(value: str) -> bool:
-    value = value.strip().lower()
+    # CSS embedded SVG commonly percent-encodes its local fragment reference:
+    # ``filter="url(%23noise)"`` means ``url(#noise)`` inside the current SVG.
+    # It is not a Deck-local file named ``%23noise``.  Decode only for
+    # classification; the original value remains untouched in the delivered
+    # HTML/CSS.
+    value = unquote(value.strip()).lower()
     return value.startswith(("http://", "https://", "//", "data:", "blob:", "#", "javascript:"))
 
 
@@ -907,6 +913,60 @@ def _validate_render_quality(root: Path, expected: int | None) -> None:
     print(f"render-quality:PASS pages={len(list(wanted))}")
 
 
+_MARKDOWN_FENCE_LINE_RE = re.compile(r"^\s*```(?:[A-Za-z0-9_+-]+)?\s*$")
+_SPEECH_WRAPPER_HEADINGS = {
+    "讲稿内容", "讲述内容", "口语讲稿", "讲稿", "口播",
+    "spoken script", "speaker script", "speech", "talk track",
+}
+_INTERNAL_SOURCE_RE = re.compile(
+    r"(?i)(?:"
+    r"(?:^|[\s`'\"(（])(?:plan|research|materials|_trace)/[^\s`'\")）]+"
+    r"|grounded-knowledge\.md"
+    r"|编排器假设|内部假设|生产备注|orchestrator assumption|production note"
+    r")"
+)
+
+
+def _clean_spoken_script(value: str) -> str:
+    """Normalize presentation prose without rewriting its authored meaning.
+
+    A weak model occasionally wraps an otherwise valid talk track in a
+    Markdown code fence or repeats a wrapper heading inside the canonical
+    ``## 口语讲稿`` section.  Those tokens are formatting accidents and must
+    never become words shown to the presenter.
+    """
+    lines = [line.rstrip() for line in str(value or "").splitlines()]
+    lines = [line for line in lines if not _MARKDOWN_FENCE_LINE_RE.fullmatch(line)]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if lines:
+        first = re.sub(r"^\s{0,3}#{1,6}\s*", "", lines[0]).strip().lower()
+        first = first.rstrip("：:").strip()
+        if first in _SPEECH_WRAPPER_HEADINGS:
+            lines.pop(0)
+            while lines and not lines[0].strip():
+                lines.pop(0)
+    return "\n".join(lines).strip()
+
+
+def _public_delivery_sources(value: str) -> str:
+    """Remove production-only provenance from the user-facing speech file.
+
+    Internal plan/research paths remain useful in the canonical page plan, but
+    ``speech.md`` is a delivery artifact surfaced by the WebUI.  Keep external
+    citations and user-provided/none markers while filtering lines that only
+    expose pipeline paths or orchestrator notes.
+    """
+    lines = []
+    for line in str(value or "").splitlines():
+        if _INTERNAL_SOURCE_RE.search(line):
+            continue
+        lines.append(line.rstrip())
+    return "\n".join(lines).strip()
+
+
 def _sync_speech(root: Path, expected: int | None) -> None:
     files = _plan_files(root, expected)
     texts = [path.read_text(encoding="utf-8") for _, path in files]
@@ -927,10 +987,10 @@ def _sync_speech(root: Path, expected: int | None) -> None:
         try:
             title = _plan_title(plan_text)
             parts = _sections(plan_text)
-            speech = _first_section(parts, SPEECH_HEADINGS)
+            speech = _clean_spoken_script(_first_section(parts, SPEECH_HEADINGS))
             if not speech:
                 raise ValueError("missing spoken script section")
-            sources = _first_section(parts, SOURCE_HEADINGS)
+            sources = _public_delivery_sources(_first_section(parts, SOURCE_HEADINGS))
             if language == "zh":
                 rows.extend([f"# 第 {number:02d} 页｜{title}", "", "## 讲述内容", "", speech, "",
                              "## 参考资料（不朗读）", "", sources or "- 本页无外部引用。", ""])
