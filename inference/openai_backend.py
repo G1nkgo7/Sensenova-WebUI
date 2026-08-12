@@ -177,7 +177,9 @@ class _Messages:
         }
         if tools:
             body["tools"] = to_openai_tools(tools)
-        if os.environ.get("STUDIO_THINKING_TRANSPORT") == "chat_template_kwargs":
+        if os.environ.get("STUDIO_THINKING_TRANSPORT", "").strip().lower() in {
+            "chat_template_kwargs", "openai",
+        }:
             body["chat_template_kwargs"] = {
                 "enable_thinking": os.environ.get(
                     "STUDIO_EFFECTIVE_THINKING",

@@ -810,6 +810,12 @@ DEFAULT_MODEL = "deployment-model"
 ENVIRONMENT_MODEL_KEY = "deployment-model"
 
 
+def _normalize_thinking_transport(value: str | None) -> str:
+    """Normalize legacy deployment transport names to the chat API contract."""
+    transport = str(value or "").strip().lower()
+    return "chat_template_kwargs" if transport == "openai" else transport
+
+
 def _environment_model() -> dict | None:
     """Build the optional deployment-managed model as its own registry item.
 
@@ -836,9 +842,11 @@ def _environment_model() -> dict | None:
             os.environ.get("SENSENOVA_MODEL_SLIDE_CONCURRENCY", "4") or "4"
         ),
         "thinking_mode": "toggle",
-        "thinking_transport": (
-            os.environ.get("SENSENOVA_MODEL_THINKING_TRANSPORT", "openai")
-            .strip().lower()
+        "thinking_transport": _normalize_thinking_transport(
+            os.environ.get(
+                "SENSENOVA_MODEL_THINKING_TRANSPORT",
+                "chat_template_kwargs",
+            )
         ),
         "deployment_managed": True,
     }

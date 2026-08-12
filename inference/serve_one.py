@@ -41,7 +41,11 @@ def _install_thinking_transport():
     for chat completions, so this process-local adapter applies the request
     option without rewriting every frozen Harness copy.
     """
-    if os.environ.get("STUDIO_THINKING_TRANSPORT") != "chat_template_kwargs":
+    transport = os.environ.get("STUDIO_THINKING_TRANSPORT", "").strip().lower()
+    # ``openai`` was the old deployment default even though this runtime uses
+    # OpenAI-compatible chat completions. Treat it as the concrete
+    # chat_template_kwargs transport so old jobs also send an explicit choice.
+    if transport not in {"chat_template_kwargs", "openai"}:
         return
     original = urllib.request.Request
     if getattr(original, "_studio_thinking_adapter", False):
