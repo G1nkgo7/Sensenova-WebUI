@@ -2093,7 +2093,10 @@ async function send() {
   void guideOptionalMaterialServices();
   beginComposerLaunch(q);
   if (creationMode === "dynamic") {
-    return sendSensePresentDazzle(q);
+    // 动态生成走已移植的 dazzle-deck 运行时（/api/dynamic/send）；
+    // 旧的 sendSensePresentDazzle 走 /api/decks + sense-present-dazzle(vendored V2)，
+    // 本仓未带 vendor/sense-present-v2 → 会报「缺少 …」。故这里改指 sendDynamic。
+    return sendDynamic(q);
   }
   const slideCount = currentSlideCount();
   const body = new FormData();        // FormData:同时带表单字段 + 附件(multipart);FastAPI Form/File 都收

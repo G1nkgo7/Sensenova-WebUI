@@ -29,7 +29,7 @@ except ModuleNotFoundError:
     # dynamic routes are never registered while STUDIO_DYNAMIC_ENABLED=0.
     runtime = None
 
-from . import auth, custom_models, engine, service_config, titles, trace
+from . import auth, custom_models, engine, features, service_config, titles, trace
 from .db import connect
 
 router = APIRouter()
@@ -49,7 +49,7 @@ def _get_db():
 
 
 def _current_user(request: Request, con=Depends(_get_db)):
-    return auth.user_from_request(request, con)
+    return features.user_for_request(request, con, auth)
 
 
 def _require_user(user=Depends(_current_user)):
@@ -361,9 +361,13 @@ async def send(request: Request, user=Depends(_require_user)):
         services = service_config.runtime_payload(user["id"])
         generation_limits = services["generation"]
         image_service = services.get("image_generation")
+        # 动态 StudioAgent 直读进程 env 的 OPENAI_API_KEY/IMAGE_MODEL、SERPER_API_KEY（由 launch.py
+        # 从 .env 注入）。故 gate 也认这几个来源：per-user 配置 > inference/.env > 部署进程 env。
+        # 否则凭证在部署 env 里齐全、工具却被 gate 撤下（enable_image_gen=False）。
+        _deploy_image_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("SENSENOVA_IMAGE_API_KEY")
         enable_image_gen = bool(image_service) or bool(
             shared_env.get("IMAGE_API_KEY") or shared_env.get("OPENAI_API_KEY")
-        )
+        ) or (os.environ.get("ENABLE_IMAGE_GEN", "1") != "0" and bool(_deploy_image_key))
         new_id = runtime.send_message(
             conv_id,
             message,

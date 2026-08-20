@@ -17,6 +17,13 @@ inference/runs/
 inference/logs/
 inference/log/
 web/.cache/
+# Dynamic (dazzle-deck) runtime: generated per-conversation decks + local font/normalize caches
+dynamic/viz/studio_runs/
+dynamic/**/runs/
+dynamic/**/queries/
+dynamic/**/data_openai/
+dynamic/**/logs/
+runtime/
 
 # Local deployment notes / backups
 NOTES.md

@@ -202,12 +202,12 @@ def _parser() -> argparse.ArgumentParser:
         help="initial WebUI language (default: zh)",
     )
     parser.add_argument(
-        "--host", default=os.environ.get("SENSE_NOVA_LOCAL_HOST", "127.0.0.1"),
-        help="listen address (default: 127.0.0.1)",
+        "--host", default=os.environ.get("SENSE_NOVA_LOCAL_HOST", "0.0.0.0"),
+        help="listen address (default: 0.0.0.0, reachable via DNAT/NIC IP)",
     )
     parser.add_argument(
-        "--port", type=int, default=int(os.environ.get("SENSE_NOVA_LOCAL_PORT", "8001")),
-        help="listen port (default: 8001)",
+        "--port", type=int, default=int(os.environ.get("SENSE_NOVA_LOCAL_PORT", "7999")),
+        help="listen port (default: 7999; 8001 is reserved for MURAL studio)",
     )
     parser.add_argument(
         "--edition", choices=("v1", "full"),
