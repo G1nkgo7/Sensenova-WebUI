@@ -48,15 +48,27 @@ SKILLS_DIR = str(acfg.SKILLS_DIR)
 STUDIO_DIR = HERE / "studio_runs"
 SYSTEM_FILE = HERE / "serve" / "dazzle_system_prompt.txt"
 
+# 按 query 语言路由到对应 skill 树（与静态 sn-ppt-web-en/-zh 同理）：中文默认 dazzle-deck，
+# 英文走自包含的 dazzle-deck-en（各自 SKILL.md/references/scripts）。两树都在工作区 skills/ 下
+# （_link_skills 软链整个 skills 目录），故仅需把提示文本里的 skill 名按语言切换。
+SKILL_NAME_ZH = "dazzle-deck"
+SKILL_NAME_EN = "dazzle-deck-en"
+
+
+def _skill_name(language: str) -> str:
+    return SKILL_NAME_EN if str(language or "").lower() == "en" else SKILL_NAME_ZH
+
+
 HARNESS_SUFFIX = "（请先 read_file skills/dazzle-deck/SKILL.md，按其流程在当前工作区完成，最终产物为 deck.html。）"
-HARNESS_SUFFIX_EN = ("(First read_file skills/dazzle-deck/SKILL.md, then follow its workflow in the current "
+HARNESS_SUFFIX_EN = ("(First read_file skills/dazzle-deck-en/SKILL.md, then follow its workflow in the current "
                      "workspace; the final artifact is deck.html.)")
 
 
 def _harness_suffix(language: str) -> str:
     """首条 user 消息拼的 harness 提示——按 query 语言选中/英，避免给英文 query 塞中文指令
-    污染语言上下文（与 SKILL.md『语言跟 query 走、不做中英并行』契约一致）。"""
+    污染语言上下文（与 SKILL.md『语言跟 query 走、不做中英并行』契约一致），并指向对应语言 skill。"""
     return HARNESS_SUFFIX_EN if str(language or "").lower() == "en" else HARNESS_SUFFIX
+
 
 
 # 上下文水位：训练 max_length=131072(128K)。
@@ -96,30 +108,44 @@ def _load_base_system() -> str:
 
 # studio 在线体验专用的 bash 说明（让模型知道现在可用 sed/awk/mv/cp/rm 等）。仅覆盖发给端点的
 # 工具描述，不动 tools.py 里 teacher 造数据用的 schema 字符串，训练分布不变。
-_STUDIO_BASH_DESC = (
-    "在当前对话工作区目录下执行 shell 命令（操作被限制在本工作区内，越界写/删会被拒绝）。\n"
-    "渲染 deck：python skills/dazzle-deck/scripts/render_deck.py deck.html shots/ --page N|--all\n"
-    "除渲染外，还可用文件处理命令编辑/排查 deck.html，例如 sed、awk、grep、mv、cp、rm、touch、"
-    "cat、head、tail、wc、find、diff 等——在大单文件 HTML 上用 sed/awk 批量改写常比 edit 精确匹配更稳。"
-    "渲染后用 vision_analyze 看 PNG。禁止网络/安装/提权/系统级破坏性命令。")
+# 渲染路径按语言指向对应 skill（dazzle-deck / dazzle-deck-en）。
+def _studio_bash_desc(language: str) -> str:
+    skill = _skill_name(language)
+    return (
+        "在当前对话工作区目录下执行 shell 命令（操作被限制在本工作区内，越界写/删会被拒绝）。\n"
+        f"渲染 deck：python skills/{skill}/scripts/render_deck.py deck.html shots/ --page N|--all\n"
+        "除渲染外，还可用文件处理命令编辑/排查 deck.html，例如 sed、awk、grep、mv、cp、rm、touch、"
+        "cat、head、tail、wc、find、diff 等——在大单文件 HTML 上用 sed/awk 批量改写常比 edit 精确匹配更稳。"
+        "渲染后用 vision_analyze 看 PNG。禁止网络/安装/提权/系统级破坏性命令。")
 
 
-def _openai_tools() -> list[dict]:
+def _openai_tools(language: str = "zh") -> list[dict]:
     """tools.py 的 Anthropic schema → OpenAI function 格式（与训练同一套 6 工具）。
-    bash 描述按 studio 放开后的能力覆盖（仅影响发给端点的工具定义，teacher schema 不变）。"""
+    bash 描述按 studio 放开后的能力覆盖 + 按语言指向对应 skill 的 render_deck.py（仅影响发给
+    端点的工具定义，teacher schema 不变）。"""
+    bash_desc = _studio_bash_desc(language)
     out = []
     for t in atools.agent_tools(enable_image_gen=True):
         desc = t.get("description", "")
         if t["name"] == "bash":
-            desc = _STUDIO_BASH_DESC
+            desc = bash_desc
         out.append({"type": "function", "function": {
             "name": t["name"], "description": desc,
             "parameters": t.get("input_schema", {"type": "object", "properties": {}})}})
     return out
 
 
+
 BASE_SYSTEM = _load_base_system()
-OPENAI_TOOLS = _openai_tools()
+# 两套语言的工具定义预构建一次（render 提示路径按语言指向对应 skill）；_stream_completion 按会话
+# 语言选用。OPENAI_TOOLS 保留为 zh 版别名，兼容仍引用它的旧代码。
+OPENAI_TOOLS_ZH = _openai_tools("zh")
+OPENAI_TOOLS_EN = _openai_tools("en")
+OPENAI_TOOLS = OPENAI_TOOLS_ZH
+
+
+def _openai_tools_for(language: str) -> list[dict]:
+    return OPENAI_TOOLS_EN if str(language or "").lower() == "en" else OPENAI_TOOLS_ZH
 
 # 英文 base system —— 与 ZH BASE_SYSTEM 语义对齐的英文孪生，供英文 query 使用（此 7999
 # 为纯 demo/体验站、产物不回流训练，故按语言切 base，让英文全链路语言干净；与静态
@@ -128,13 +154,13 @@ BASE_SYSTEM_EN = """\
 You are a top-tier front-end engineer and visual designer chasing Awwwards-level visual impact, built to move people: by default make every artifact visually stunning, atmospheric, and memorable, while keeping typography rigorous and content truthful.
 
 How you work:
-- Understand the task first. This task has a dedicated Skill: first `read_file skills/dazzle-deck/SKILL.md` to learn its workflow and contract, then execute per that Skill (progressively read_file the reference files it points to, only when needed).
+- Understand the task first. This task has a dedicated Skill: first `read_file skills/dazzle-deck-en/SKILL.md` to learn its workflow and contract, then execute per that Skill (progressively read_file the reference files it points to, only when needed).
 - **Drive autonomously** — do not ask the user questions or pause for confirmation; fill in reasonable assumptions yourself and make tasteful decisions.
 - Use the tools to **actually produce files** (plan.md, deck.html), not merely describe them in prose; you must render first, then look at the screenshots to self-check.
 - When everything is done, finish with **one short prose summary** — that summary is your final output.
 
 Available Skill:
-- dazzle-deck (`skills/dazzle-deck/SKILL.md`): produce a single-HTML dazzling presentation deck (1280×720, 16:9, keyboard paging, immersive motion and cross-slide transitions)."""
+- dazzle-deck-en (`skills/dazzle-deck-en/SKILL.md`): produce a single-HTML dazzling presentation deck (1280×720, 16:9, keyboard paging, immersive motion and cross-slide transitions)."""
 
 
 def _base_system(language: str) -> str:
@@ -208,11 +234,12 @@ def _narration(content: str) -> str:
 class StudioAgent:
     """tools.dispatch 需要的最小上下文：沙箱路径 + 渲染/视觉/生图配置 + 计数器。"""
 
-    def __init__(self, ws: str, enable_image_gen: bool):
+    def __init__(self, ws: str, enable_image_gen: bool, language: str = "zh"):
         self.ws = os.path.abspath(ws)
         self.sub_dir = os.path.join(self.ws, "_trace", "agent")
         os.makedirs(os.path.join(self.sub_dir, "images"), exist_ok=True)
-        self.render_script = acfg.RENDER_SCRIPT_REL
+        # 渲染脚本路径按会话语言指向对应 skill（tools.py 的 render 提示用 self.render_script）。
+        self.render_script = f"skills/{_skill_name(language)}/scripts/render_deck.py"
         self.bash_timeout = acfg.BASH_TIMEOUT_S
         self.max_vision_edge = acfg.MAX_VISION_EDGE
         # studio 在线体验：放开 bash（sed/awk/mv/cp/rm 等），靠 tools.bash 的路径守卫关在本工作区内。
@@ -561,7 +588,7 @@ def _stream_completion(vllm_url, model, messages, max_tokens, on_delta, img_mode
     body = {
         "model": model,
         "messages": [{"role": "system", "content": system_content}] + send_msgs,
-        "tools": OPENAI_TOOLS,
+        "tools": _openai_tools_for(language),
         "tool_choice": "auto",
         "stream": True,
         "max_tokens": max_tokens,
@@ -745,10 +772,9 @@ def _run_loop(conv_id: str, vllm_url: str, model: str, enable_image_gen: bool, i
               max_tokens: int = 0, max_turns: int = 0):
     ws = str(_conv_dir(conv_id))
     _link_skills(ws)
-    agent = StudioAgent(ws, enable_image_gen)
     per_turn_cap = max_tokens if max_tokens and max_tokens > 0 else PER_TURN_MAX_TOKENS
     turn_budget = max_turns if max_turns and max_turns > 0 else MAX_TURNS
-    # 权威时间上下文 + 可见语言指令（与静态 sn-ppt-web 对齐）：整轮共用会话创建时的
+    # 权威时间上下文 + 可见语言指令 + skill 路由（与静态 sn-ppt-web 对齐）：整轮共用会话创建时的
     # started_epoch 与 prompt_language；语言缺失时按首条 user 消息即时判定（续编老会话兜底）。
     _meta = _read_meta(conv_id)
     _started_epoch = _meta.get("started_epoch") or time.time()
@@ -760,6 +786,8 @@ def _run_loop(conv_id: str, vllm_url: str, model: str, enable_image_gen: bool, i
             prompt_language = _infer_prompt_language(_first_user.get("content", ""))
         except Exception:  # noqa: BLE001
             prompt_language = "zh"
+    # StudioAgent 的 render_script 按语言指向对应 skill，故须在语言判定后再创建。
+    agent = StudioAgent(ws, enable_image_gen, language=prompt_language)
     time_context = (
         f"{_runtime_time_context(_started_epoch, prompt_language)}\n"
         f"{_visible_response_language_context(prompt_language)}"
