@@ -3688,16 +3688,37 @@ async function copyOutputLocation() {
   if (!button || !ed.id) return;
   button.disabled = true;
   button.textContent = "读取中…";
+  let path = "";
   try {
     const endpoint = ed.kind === "dynamic"
       ? `/api/dynamic/output-location?conv_id=${encodeURIComponent(ed.id)}`
       : `/api/decks/${encodeURIComponent(ed.id)}/output-location`;
-    const payload = await jget(endpoint);
-    await writeClipboardText(payload.path || "");
+    // 加超时:output-location 走 AFS FUSE 的 .resolve()/.is_dir(),I/O 高压下可能卡死。
+    // 无超时的 fetch 会让「读取中…」一直转、按钮永久 disabled(promise 不 settle → finally 不跑)。
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    let payload;
+    try {
+      const r = await fetch(endpoint, { credentials: "same-origin", signal: controller.signal });
+      if (!r.ok) throw new Error(await r.text());
+      payload = await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+    path = payload.path || "";
+    await writeClipboardText(path);
     setTemporaryButtonText(button, "目录已复制", "⌘ 复制输出目录");
   } catch (error) {
     console.warn("Output location copy failed", error);
-    setTemporaryButtonText(button, "复制失败", "⌘ 复制输出目录", 1900);
+    // 复制失败(多为非安全上下文:经 DNAT/HTTP 访问,navigator.clipboard 不可用、execCommand 被拒),
+    // 或读取超时。已拿到路径就用 prompt 兜底让用户手动复制;否则提示失败。
+    if (path) {
+      setTemporaryButtonText(button, "请手动复制", "⌘ 复制输出目录", 1900);
+      window.prompt("自动复制不可用（非 HTTPS 环境）。输出目录如下，请手动复制：", path);
+    } else {
+      const aborted = error?.name === "AbortError";
+      setTemporaryButtonText(button, aborted ? "读取超时" : "复制失败", "⌘ 复制输出目录", 1900);
+    }
   } finally {
     button.disabled = false;
   }
