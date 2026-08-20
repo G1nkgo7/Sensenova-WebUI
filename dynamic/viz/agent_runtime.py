@@ -45,7 +45,9 @@ from agentic import config as acfg  # noqa: E402  路径/画布常量
 from agentic import tools as atools  # noqa: E402  与训练同款工具实现
 
 SKILLS_DIR = str(acfg.SKILLS_DIR)
-STUDIO_DIR = HERE / "studio_runs"
+# 动态会话产物根目录。默认 HERE/studio_runs（仓内），可用 SENSENOVA_DYNAMIC_RUNS_DIR 覆盖到
+# 仓外数据盘（如 /mnt/afs/multimodal_data/.../dynamic_runs），把大体积 deck 从 afs 配额里挪走。
+STUDIO_DIR = Path(os.environ.get("SENSENOVA_DYNAMIC_RUNS_DIR", "").strip() or (HERE / "studio_runs"))
 SYSTEM_FILE = HERE / "serve" / "dazzle_system_prompt.txt"
 
 # 按 query 语言路由到对应 skill 树（与静态 sn-ppt-web-en/-zh 同理）：中文默认 dazzle-deck，
@@ -119,13 +121,28 @@ def _studio_bash_desc(language: str) -> str:
         "渲染后用 vision_analyze 看 PNG。禁止网络/安装/提权/系统级破坏性命令。")
 
 
-def _openai_tools(language: str = "zh") -> list[dict]:
-    """tools.py 的 Anthropic schema → OpenAI function 格式（与训练同一套 6 工具）。
+def _studio_bash_desc(language: str, vision: bool = True) -> str:
+    skill = _skill_name(language)
+    tail = ("渲染后用 vision_analyze 看 PNG。禁止网络/安装/提权/系统级破坏性命令。" if vision
+            else "本模型看不了图，渲染出的 PNG 无法查看；请依据 deck.html 结构与常识自检，禁止网络/安装/提权/系统级破坏性命令。")
+    return (
+        "在当前对话工作区目录下执行 shell 命令（操作被限制在本工作区内，越界写/删会被拒绝）。\n"
+        f"渲染 deck：python skills/{skill}/scripts/render_deck.py deck.html shots/ --page N|--all\n"
+        "除渲染外，还可用文件处理命令编辑/排查 deck.html，例如 sed、awk、grep、mv、cp、rm、touch、"
+        "cat、head、tail、wc、find、diff 等——在大单文件 HTML 上用 sed/awk 批量改写常比 edit 精确匹配更稳。"
+        + tail)
+
+
+def _openai_tools(language: str = "zh", vision: bool = True) -> list[dict]:
+    """tools.py 的 Anthropic schema → OpenAI function 格式（与训练同一套工具）。
     bash 描述按 studio 放开后的能力覆盖 + 按语言指向对应 skill 的 render_deck.py（仅影响发给
-    端点的工具定义，teacher schema 不变）。"""
-    bash_desc = _studio_bash_desc(language)
+    端点的工具定义，teacher schema 不变）。vision=False（纯文本模型）时撤下 vision_analyze——
+    它会把截图像素回灌给模型，纯文本端点收到 image_url 会 400，且模型本就看不了图。"""
+    bash_desc = _studio_bash_desc(language, vision)
     out = []
     for t in atools.agent_tools(enable_image_gen=True):
+        if not vision and t["name"] == "vision_analyze":
+            continue
         desc = t.get("description", "")
         if t["name"] == "bash":
             desc = bash_desc
@@ -137,15 +154,20 @@ def _openai_tools(language: str = "zh") -> list[dict]:
 
 
 BASE_SYSTEM = _load_base_system()
-# 两套语言的工具定义预构建一次（render 提示路径按语言指向对应 skill）；_stream_completion 按会话
-# 语言选用。OPENAI_TOOLS 保留为 zh 版别名，兼容仍引用它的旧代码。
-OPENAI_TOOLS_ZH = _openai_tools("zh")
-OPENAI_TOOLS_EN = _openai_tools("en")
+# 预构建工具定义：按语言（render 路径）× 是否多模态（含不含 vision_analyze）。_stream_completion
+# 按会话 language + img_mode 选用。OPENAI_TOOLS 保留为 zh 多模态版别名，兼容仍引用它的旧代码。
+OPENAI_TOOLS_ZH = _openai_tools("zh", vision=True)
+OPENAI_TOOLS_EN = _openai_tools("en", vision=True)
+OPENAI_TOOLS_ZH_TEXT = _openai_tools("zh", vision=False)
+OPENAI_TOOLS_EN_TEXT = _openai_tools("en", vision=False)
 OPENAI_TOOLS = OPENAI_TOOLS_ZH
 
 
-def _openai_tools_for(language: str) -> list[dict]:
-    return OPENAI_TOOLS_EN if str(language or "").lower() == "en" else OPENAI_TOOLS_ZH
+def _openai_tools_for(language: str, vision: bool = True) -> list[dict]:
+    en = str(language or "").lower() == "en"
+    if not vision:
+        return OPENAI_TOOLS_EN_TEXT if en else OPENAI_TOOLS_ZH_TEXT
+    return OPENAI_TOOLS_EN if en else OPENAI_TOOLS_ZH
 
 # 英文 base system —— 与 ZH BASE_SYSTEM 语义对齐的英文孪生，供英文 query 使用（此 7999
 # 为纯 demo/体验站、产物不回流训练，故按语言切 base，让英文全链路语言干净；与静态
@@ -526,6 +548,11 @@ def _prep_for_send(messages, img_mode=None):
                 else:
                     nc.append(part)
             out.append({**m, "content": nc})
+        elif img_mode == "text":
+            # 纯文本模型（如 DeepSeek V4）：端点只认 content=str，收到 image_url 变体会 400。
+            # 丢弃所有图像块（不留 <image> 占位），只把 text 部分拼成字符串。
+            parts = [part.get("text", "") for part in c if part.get("type") == "text"]
+            out.append({**m, "content": "\n".join(p for p in parts if p)})
         else:   # swift_images
             parts = []
             for part in c:
@@ -588,7 +615,7 @@ def _stream_completion(vllm_url, model, messages, max_tokens, on_delta, img_mode
     body = {
         "model": model,
         "messages": [{"role": "system", "content": system_content}] + send_msgs,
-        "tools": _openai_tools_for(language),
+        "tools": _openai_tools_for(language, vision=(img_mode != "text")),
         "tool_choice": "auto",
         "stream": True,
         "max_tokens": max_tokens,

@@ -147,4 +147,5 @@ def runtime_config(row) -> dict:
         "api_key": decrypt_api_key(row["api_key_enc"]),
         "slide_concurrency": 4,
         "custom": True,
+        "multimodal": bool(row["vision_enabled"]),
     }

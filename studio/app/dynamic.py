@@ -96,6 +96,8 @@ def _model_registry(user=None) -> dict[str, dict]:
             for row in rows:
                 cfg = custom_models.runtime_config(row)
                 key = custom_models.key_for(row["id"])
+                # 纯文本自定义模型（vision_enabled=0，如 DeepSeek V4）→ img_mode="text"：
+                # runtime 撤下 vision_analyze + 发送时丢弃图像块，避免 image_url 触发端点 400。
                 out[key] = {
                     "label": cfg["label"],
                     "url": cfg["base_url"],
@@ -103,7 +105,7 @@ def _model_registry(user=None) -> dict[str, dict]:
                     "api_key": cfg["api_key"],
                     "api_style": "openai",
                     "thinking_transport": False,
-                    "img_mode": "openai_url",
+                    "img_mode": "openai_url" if cfg.get("multimodal") else "text",
                     "custom": True,
                 }
         finally:
