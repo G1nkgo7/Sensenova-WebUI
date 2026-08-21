@@ -88,6 +88,15 @@ SN_PPT_WEB_HARNESS_ROOT = Path(
 SN_PPT_WEB_HARNESS_ENTRY = os.environ.get(
     "PPTAGENT_SN_PPT_WEB_HARNESS_ENTRY", "presenter.py"
 )
+# 「快速版」skill 树根：与 sn-ppt-web 同结构（sn-ppt-web{,-zh,-en}），但 SKILL.md 去掉新建流程的
+# 全册 final_review。整套走同一 harness，只是让 PPT_SKILLS_ROOT 指向这个目录（见该 skill 的 runtime_env），
+# harness 便从这里取 sn-ppt-web-zh/-en。
+SN_PPT_WEB_NOREVIEW_SKILLS_ROOT = Path(
+    os.environ.get(
+        "PPTAGENT_SN_PPT_WEB_NOREVIEW_SKILLS_ROOT",
+        SN_PPT_WEB_SUITE_ROOT / "skills-noreview",
+    )
+)
 MURAL_PRESENTER_SKILL_ROOT = Path(
     os.environ.get(
         "PPTAGENT_MURAL_PRESENTER_SKILL_ROOT",
@@ -390,6 +399,10 @@ def _visual_craft_skill(
 def _sn_ppt_web_skill(
     skill_root: Path = SN_PPT_WEB_SKILL_ROOT,
     harness_root: Path = SN_PPT_WEB_HARNESS_ROOT,
+    *,
+    name: str = "sn-ppt-web",
+    label: str | None = None,
+    runtime_env: dict | None = None,
 ) -> dict:
     """Register the renamed static high-design Skill with its paired Harness."""
     required_files = (
@@ -443,17 +456,17 @@ def _sn_ppt_web_skill(
         _hash_runtime_tree(digest, harness_root, prefix="harness/")
     ready = not missing_skill and not missing_harness
     return {
-        "label": os.environ.get(
+        "label": label or os.environ.get(
             "PPTAGENT_SN_PPT_WEB_DISPLAY_NAME",
             "sn-ppt-web",
         ),
         "path": str(skill_root),
         "skills_root": str(skill_root.parent),
-        "name": "sn-ppt-web",
+        "name": name,
         "language": "zh",
         "deck_language": "auto",
         "force_skill_language": "",
-        "mode": "sn-ppt-web",
+        "mode": name,
         "status": "current" if ready else "unavailable",
         "ready": ready,
         "unavailable_reason": "；".join(reasons),
@@ -465,6 +478,7 @@ def _sn_ppt_web_skill(
         "harness_required_files": list(harness_required),
         "pairing": "sn-ppt-web-paired",
         "caps": ["attachments", "revision", "static_html", "custom_fonts"],
+        "runtime_env": dict(runtime_env or {}),
     }
 
 
@@ -623,6 +637,15 @@ SKILLS = {
     ),
     "visual-craft": _visual_craft_skill(),
     "sn-ppt-web": _sn_ppt_web_skill(),
+    "sn-ppt-web-noreview": _sn_ppt_web_skill(
+        skill_root=SN_PPT_WEB_NOREVIEW_SKILLS_ROOT / "sn-ppt-web",
+        name="sn-ppt-web-noreview",
+        label=os.environ.get(
+            "PPTAGENT_SN_PPT_WEB_NOREVIEW_DISPLAY_NAME",
+            "sn-ppt-web · 快速（无终审）",
+        ),
+        runtime_env={"PPT_SKILLS_ROOT": str(SN_PPT_WEB_NOREVIEW_SKILLS_ROOT)},
+    ),
     "mural-presenter": _mural_presenter_skill(),
 }
 # The public V1 release exposes one stable workflow. Other catalog entries stay

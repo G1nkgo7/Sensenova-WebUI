@@ -41,31 +41,6 @@ import warnings
 from io import BytesIO
 from pathlib import Path
 
-# --- auto re-exec into fancy-sft conda env unless already running under it ---
-# 判据用"当前解释器是否就是 fancy-sft",而非"能否 import playwright"：
-# 系统 python(/usr/bin/python)可能从 ~/.local 里 import 到 playwright 却缺 chromium
-# 依赖库(libnss3/libgbm/libX* 等,只在 conda + ~/pwdeps 里),导致浏览器启动即崩
-# (TargetClosedError)。故只要不是 fancy-sft 就无条件切过去，不再信任 import 成功与否。
-_FANCY_PYS = [
-    os.path.expanduser('~/miniconda3/envs/fancy-sft/bin/python'),
-    '/mnt/afs/maruize/miniconda3/envs/fancy-sft/bin/python',
-]
-if 'PLAYWRIGHT_REEXEC' not in os.environ and 'envs/fancy-sft/' not in sys.executable:
-    for _cand in _FANCY_PYS:
-        if os.path.exists(_cand):
-            os.environ['PLAYWRIGHT_REEXEC'] = '1'
-            # Clear the cursor sandbox's fake playwright path so playwright uses the default ~/.cache/ms-playwright
-            os.environ.pop('PLAYWRIGHT_BROWSERS_PATH', None)
-            # Set CONDA_PREFIX so ensure_browser_libs() can find conda's nss/nspr/X11 and other dependencies
-            _env_root = os.path.dirname(os.path.dirname(_cand))
-            os.environ['CONDA_PREFIX'] = _env_root
-            os.execv(_cand, [_cand, __file__] + sys.argv[1:])
-# Even when started from the native fancy-sft environment, clear cursor's fake path
-if os.environ.get('PLAYWRIGHT_BROWSERS_PATH', '').startswith('/tmp/cursor-sandbox-cache'):
-    os.environ.pop('PLAYWRIGHT_BROWSERS_PATH', None)
-if 'CONDA_PREFIX' not in os.environ and 'fancy-sft' in sys.executable:
-    os.environ['CONDA_PREFIX'] = os.path.dirname(os.path.dirname(sys.executable))
-
 warnings.filterwarnings("ignore", category=DeprecationWarning)  # PIL getdata noise
 
 # ── Canvas dimensions / timing constants ─────────────────────────────────────

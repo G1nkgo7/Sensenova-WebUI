@@ -197,9 +197,14 @@ class _Messages:
         msg = d["choices"][0]["message"]
         fr = d["choices"][0].get("finish_reason", "stop")
         u = d.get("usage") or {}
+        # prefix cache 命中在 OpenAI 兼容字段 usage.prompt_tokens_details.cached_tokens 回传
+        # (lightllm/vLLM 都用这个)。旧版硬编码 0 → 缓存实际生效但统计恒为 0,误判「零命中」。
+        _ptd = u.get("prompt_tokens_details") or {}
+        _cached = _ptd.get("cached_tokens", 0) or 0
         usage = SimpleNamespace(input_tokens=u.get("prompt_tokens", 0),
                                 output_tokens=u.get("completion_tokens", 0),
-                                cache_read_input_tokens=0, cache_creation_input_tokens=0)
+                                cache_read_input_tokens=_cached,
+                                cache_creation_input_tokens=0)
         return SimpleNamespace(content=_resp_to_blocks(msg),
                                stop_reason=_STOP.get(fr, "end_turn"), usage=usage)
 
